@@ -13,18 +13,47 @@ export const projects = sqliteTable('projects', {
   updatedAt: text('updated_at').notNull(),
 })
 
-export const episodes = sqliteTable('episodes', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id').notNull().references(() => projects.id),
-  episodeNo: integer('episode_no').notNull(),
-  title: text('title'),
-  summary: text('summary'),
-  scriptId: text('script_id'),
-  videoUrl: text('video_url'),
-  status: text('status').notNull().default('draft'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-})
+export const episodes = sqliteTable(
+  'episodes',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeNo: integer('episode_no').notNull(),
+    title: text('title'),
+    summary: text('summary'),
+    openingHook: text('opening_hook'),
+    endingHook: text('ending_hook'),
+    scriptId: text('script_id'),
+    videoUrl: text('video_url'),
+    status: text('status').notNull().default('draft'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    projectEpisodeNoUnique: uniqueIndex('episodes_project_episode_no_unique').on(table.projectId, table.episodeNo),
+  }),
+)
+
+export const scripts = sqliteTable(
+  'scripts',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeId: text('episode_id').notNull().references(() => episodes.id),
+    title: text('title').notNull(),
+    summary: text('summary').notNull(),
+    openingHook: text('opening_hook'),
+    endingHook: text('ending_hook'),
+    content: text('content').notNull(),
+    structuredJson: text('structured_json').notNull(),
+    status: text('status').notNull().default('draft'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    episodeUnique: uniqueIndex('scripts_episode_id_unique').on(table.episodeId),
+  }),
+)
 
 export const novelChapters = sqliteTable('novel_chapters', {
   id: text('id').primaryKey(),
@@ -64,15 +93,141 @@ export const novelEvents = sqliteTable(
   }),
 )
 
-export const episodeEventLinks = sqliteTable('episode_event_links', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id').notNull().references(() => projects.id),
-  episodeId: text('episode_id').notNull().references(() => episodes.id),
-  eventId: text('event_id').notNull().references(() => novelEvents.id),
-  orderNo: integer('order_no').notNull(),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-})
+export const episodeEventLinks = sqliteTable(
+  'episode_event_links',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeId: text('episode_id').notNull().references(() => episodes.id),
+    novelEventId: text('novel_event_id').notNull().references(() => novelEvents.id),
+    orderInEpisode: integer('order_in_episode').notNull(),
+    usageType: text('usage_type').notNull().default('primary'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    episodeOrderUnique: uniqueIndex('episode_event_links_episode_order_unique').on(
+      table.episodeId,
+      table.orderInEpisode,
+    ),
+    novelEventUnique: uniqueIndex('episode_event_links_novel_event_unique').on(table.novelEventId),
+  }),
+)
+
+export const characters = sqliteTable(
+  'characters',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    name: text('name').notNull(),
+    aliasJson: text('alias_json').notNull().default('[]'),
+    role: text('role'),
+    age: text('age'),
+    gender: text('gender'),
+    appearance: text('appearance'),
+    personality: text('personality'),
+    background: text('background'),
+    relationshipJson: text('relationship_json').notNull().default('[]'),
+    referenceImageUrl: text('reference_image_url'),
+    voiceId: text('voice_id'),
+    status: text('status').notNull().default('active'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    projectNameUnique: uniqueIndex('characters_project_name_unique').on(table.projectId, table.name),
+  }),
+)
+
+export const scenes = sqliteTable(
+  'scenes',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    locationType: text('location_type'),
+    visualStyle: text('visual_style'),
+    visualPrompt: text('visual_prompt'),
+    referenceImageUrl: text('reference_image_url'),
+    status: text('status').notNull().default('active'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    projectNameUnique: uniqueIndex('scenes_project_name_unique').on(table.projectId, table.name),
+  }),
+)
+
+export const props = sqliteTable(
+  'props',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    significance: text('significance'),
+    visualPrompt: text('visual_prompt'),
+    referenceImageUrl: text('reference_image_url'),
+    status: text('status').notNull().default('active'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    projectNameUnique: uniqueIndex('props_project_name_unique').on(table.projectId, table.name),
+  }),
+)
+
+export const episodeCharacterLinks = sqliteTable(
+  'episode_character_links',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeId: text('episode_id').notNull().references(() => episodes.id),
+    characterId: text('character_id').notNull().references(() => characters.id),
+    usageType: text('usage_type').notNull().default('mentioned'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    episodeCharacterUnique: uniqueIndex('episode_character_links_episode_character_unique').on(
+      table.episodeId,
+      table.characterId,
+    ),
+  }),
+)
+
+export const episodeSceneLinks = sqliteTable(
+  'episode_scene_links',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeId: text('episode_id').notNull().references(() => episodes.id),
+    sceneId: text('scene_id').notNull().references(() => scenes.id),
+    usageType: text('usage_type').notNull().default('used'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    episodeSceneUnique: uniqueIndex('episode_scene_links_episode_scene_unique').on(table.episodeId, table.sceneId),
+  }),
+)
+
+export const episodePropLinks = sqliteTable(
+  'episode_prop_links',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeId: text('episode_id').notNull().references(() => episodes.id),
+    propId: text('prop_id').notNull().references(() => props.id),
+    usageType: text('usage_type').notNull().default('used'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    episodePropUnique: uniqueIndex('episode_prop_links_episode_prop_unique').on(table.episodeId, table.propId),
+  }),
+)
 
 export const agentRuns = sqliteTable('agent_runs', {
   id: text('id').primaryKey(),
@@ -112,15 +267,31 @@ export const generationTasks = sqliteTable('generation_tasks', {
 export const schema = {
   projects,
   episodes,
+  scripts,
   novelChapters,
   novelEvents,
   episodeEventLinks,
+  characters,
+  scenes,
+  props,
+  episodeCharacterLinks,
+  episodeSceneLinks,
+  episodePropLinks,
   agentRuns,
   generationTasks,
 }
 
 export type Project = typeof projects.$inferSelect
+export type Episode = typeof episodes.$inferSelect
+export type Script = typeof scripts.$inferSelect
 export type NovelChapter = typeof novelChapters.$inferSelect
 export type NovelEvent = typeof novelEvents.$inferSelect
+export type EpisodeEventLink = typeof episodeEventLinks.$inferSelect
+export type Character = typeof characters.$inferSelect
+export type Scene = typeof scenes.$inferSelect
+export type Prop = typeof props.$inferSelect
+export type EpisodeCharacterLink = typeof episodeCharacterLinks.$inferSelect
+export type EpisodeSceneLink = typeof episodeSceneLinks.$inferSelect
+export type EpisodePropLink = typeof episodePropLinks.$inferSelect
 export type AgentRun = typeof agentRuns.$inferSelect
 export type GenerationTask = typeof generationTasks.$inferSelect
