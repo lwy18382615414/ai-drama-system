@@ -22,7 +22,7 @@ See `docs/phase-roadmap.md` for the current phase roadmap.
 
 Use this architecture unless the user explicitly asks to change it:
 
-- Frontend: Vue 3 / Nuxt 3 / TypeScript
+- Frontend: Vue 3 / Vite / TypeScript
 - Backend: Node.js / TypeScript / Hono
 - Database: SQLite for MVP, PostgreSQL later
 - ORM: Drizzle
