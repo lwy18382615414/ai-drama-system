@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { chapters, events } from '@/mock'
+import { onMounted, ref, watch } from 'vue'
+import { getProjectChapters, type NovelChapter } from '@/api/projects'
+import { extractEvents, getChapterEvents, getEventExtractionStatus, type EventExtractionTask } from '@/api/events'
+import type { NovelEvent } from '@/api/episodes'
+import { getApiErrorMessage } from '@/api/client'
+import { toPipelineStatus } from '@/utils/status'
+import { useTaskPolling } from '@/composables/useTaskPolling'
 import { useProject } from '@/composables/useProject'
 import PipelineSteps from '@/components/PipelineSteps.vue'
 import PanelCard from '@/components/PanelCard.vue'
@@ -8,12 +13,67 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import MockButton from '@/components/MockButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
+const message = useMessage()
 const { projectId } = useProject()
-const projectChapters = computed(() => chapters.filter((c) => c.projectId === projectId.value))
 
-const selectedChapter = ref(projectChapters.value[0]?.id ?? '')
-const chapterEvents = computed(() => events.filter((e) => e.chapterId === selectedChapter.value))
+const projectChapters = ref<NovelChapter[]>([])
+const chaptersLoading = ref(false)
+const selectedChapter = ref('')
+const chapterEvents = ref<NovelEvent[]>([])
 const draft = ref('')
+
+async function loadChapters() {
+  if (!projectId.value) return
+  chaptersLoading.value = true
+  try {
+    projectChapters.value = await getProjectChapters(projectId.value)
+    if (!selectedChapter.value) {
+      selectedChapter.value = projectChapters.value[0]?.id ?? ''
+    }
+  } catch (error) {
+    message.error(getApiErrorMessage(error))
+  } finally {
+    chaptersLoading.value = false
+  }
+}
+
+async function loadChapterEvents() {
+  if (!selectedChapter.value) {
+    chapterEvents.value = []
+    return
+  }
+  try {
+    chapterEvents.value = await getChapterEvents(selectedChapter.value)
+  } catch (error) {
+    message.error(getApiErrorMessage(error))
+  }
+}
+
+onMounted(loadChapters)
+watch(projectId, loadChapters)
+watch(selectedChapter, loadChapterEvents)
+
+const { start: startPolling, isPolling: extracting } = useTaskPolling<EventExtractionTask>({
+  fetchStatus: getEventExtractionStatus,
+  isDone: (t) => t.status === 'completed',
+  isFailed: (t) => t.status === 'failed',
+  getErrorMessage: (t) => t.errorMessage,
+  onDone: () => {
+    message.success('事件提取完成')
+    void loadChapterEvents()
+  },
+  onFailed: (t) => message.error(t.errorMessage ?? '事件提取失败'),
+})
+
+async function extract() {
+  if (!selectedChapter.value) return
+  try {
+    const { taskId } = await extractEvents(projectId.value, selectedChapter.value)
+    startPolling(taskId)
+  } catch (error) {
+    message.error(getApiErrorMessage(error))
+  }
+}
 </script>
 
 <template>
@@ -21,22 +81,23 @@ const draft = ref('')
     <div class="sf-page-head">
       <div>
         <h1 class="sf-page-title">小说与事件</h1>
-        <p class="sf-page-desc">导入小说章节，由 EventAgent 提取结构化事件（演示数据）。</p>
+        <p class="sf-page-desc">导入小说章节，由 EventAgent 提取结构化事件。</p>
       </div>
-      <MockButton label="导入章节" variant="primary" icon="⬆️" />
+      <MockButton label="导入章节" variant="primary" icon="⬆️" hint="暂未提供导入接口" />
     </div>
 
     <PipelineSteps active-key="events" />
 
+    <n-spin :show="chaptersLoading">
     <div class="sf-grid sf-grid--2">
-      <PanelCard title="章节">
-        <table class="sf-table">
+      <PanelCard title="章节" framed>
+        <EmptyState v-if="!projectChapters.length" icon="📖" title="尚无章节" desc="该项目还没有导入任何小说章节。" />
+        <table v-else class="sf-table">
           <thead>
             <tr>
               <th>#</th>
               <th>标题</th>
               <th>字数</th>
-              <th>事件</th>
               <th>状态</th>
             </tr>
           </thead>
@@ -50,17 +111,23 @@ const draft = ref('')
               <td><strong>{{ c.chapterNo }}</strong></td>
               <td><strong>{{ c.title }}</strong></td>
               <td>{{ c.wordCount }}</td>
-              <td>{{ c.eventCount }}</td>
-              <td><StatusBadge :status="c.status" /></td>
+              <td><StatusBadge :status="toPipelineStatus(c.status)" /></td>
             </tr>
           </tbody>
         </table>
 
         <div class="sf-field sf-mt-16">
           <label class="sf-label">粘贴新章节正文</label>
-          <textarea v-model="draft" class="sf-textarea" placeholder="在此粘贴小说章节文本…（演示，未接后端）" />
+          <n-input
+            v-model:value="draft"
+            type="textarea"
+            placeholder="在此粘贴小说章节文本…（暂未提供导入接口）"
+            :autosize="{ minRows: 8, maxRows: 14 }"
+          />
         </div>
-        <MockButton label="提取事件" variant="primary" icon="✨" />
+        <n-button type="primary" :loading="extracting" :disabled="!selectedChapter" @click="extract">
+          ✨ 提取事件
+        </n-button>
       </PanelCard>
 
       <PanelCard :title="`已提取事件 · ${chapterEvents.length}`">
@@ -76,5 +143,6 @@ const draft = ref('')
         </ol>
       </PanelCard>
     </div>
+    </n-spin>
   </div>
 </template>

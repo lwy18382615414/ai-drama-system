@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:server": "tsx apps/server/index.ts",
+    "dev:server": "tsx --env-file-if-exists=.env apps/server/index.ts",
+    "seed": "tsx apps/server/seed.ts",
+    "smoke:text-provider": "tsx --env-file-if-exists=.env scripts/smoke-test-text-provider.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -13,6 +15,7 @@
     "drizzle-orm": "latest",
     "hono": "latest",
     "nanoid": "latest",
+    "openai": "latest",
     "sql.js": "latest",
     "zod": "latest"
   },

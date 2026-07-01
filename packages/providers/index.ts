@@ -1,2 +1,3 @@
 export * from './text-provider.js'
 export * from './image-provider.js'
+export * from './openai-compatible-text-provider.js'

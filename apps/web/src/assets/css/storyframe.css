@@ -1,7 +1,7 @@
 /*
  * StoryFrame — design system for the AI 短剧工作台 (AI short-drama workbench).
  *
- * Phase 1 skeleton styling. This is a self-contained baseline derived from the
+ * Light "storyframe blue" palette. Self-contained baseline derived from the
  * product domain; when the source design doc (docs/design/AI短剧工作台.dc.html)
  * is available, its extracted tokens/components can replace the values below
  * without changing the .sf-* class contract the components rely on.
@@ -9,33 +9,33 @@
 
 /* ------------------------------------------------------------------ tokens */
 :root {
-  /* palette — cinematic dark workbench */
-  --sf-bg: #0e1016;
-  --sf-bg-elev: #161a24;
-  --sf-panel: #1b2030;
-  --sf-panel-2: #212739;
-  --sf-border: #2a3145;
-  --sf-border-soft: #232a3c;
+  /* palette — light, clean, fresh blue */
+  --sf-bg: #f6f8fc;
+  --sf-bg-elev: #ffffff;
+  --sf-panel: #ffffff;
+  --sf-panel-2: #f1f4f9;
+  --sf-border: #e2e8f0;
+  --sf-border-soft: #ebeff5;
 
-  --sf-text: #e8ebf2;
-  --sf-text-dim: #a2abc2;
-  --sf-text-faint: #6b7488;
+  --sf-text: #101828;
+  --sf-text-dim: #4b5876;
+  --sf-text-faint: #8a93a6;
 
-  --sf-primary: #7c5cff;
-  --sf-primary-2: #9d84ff;
-  --sf-primary-soft: rgba(124, 92, 255, 0.16);
-  --sf-accent: #ff7ab6;
+  --sf-primary: #2f55d4;
+  --sf-primary-2: #4a6fe0;
+  --sf-primary-soft: rgba(47, 85, 212, 0.08);
+  --sf-accent: #17b3c7;
 
-  --sf-success: #3ecf8e;
-  --sf-warning: #f5b544;
-  --sf-danger: #ff6b6b;
-  --sf-info: #4aa8ff;
+  --sf-success: #16a34a;
+  --sf-warning: #d97706;
+  --sf-danger: #dc2626;
+  --sf-info: #0ea5e9;
 
   /* status */
-  --sf-status-draft: #6b7488;
-  --sf-status-generating: #4aa8ff;
-  --sf-status-done: #3ecf8e;
-  --sf-status-failed: #ff6b6b;
+  --sf-status-draft: #8a93a6;
+  --sf-status-generating: #0ea5e9;
+  --sf-status-done: #16a34a;
+  --sf-status-failed: #dc2626;
 
   /* geometry */
   --sf-radius-sm: 6px;
@@ -45,11 +45,13 @@
   --sf-sidebar-w: 236px;
   --sf-topbar-h: 60px;
 
-  --sf-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
-  --sf-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+  --sf-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --sf-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
 
   --sf-font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
+  --sf-font-display: "Manrope", "PingFang SC", "Microsoft YaHei", system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 /* -------------------------------------------------------------------- base */
@@ -83,6 +85,7 @@ h2,
 h3,
 h4 {
   margin: 0;
+  font-family: var(--sf-font-display);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -131,8 +134,10 @@ h4 {
   display: grid;
   place-items: center;
   font-size: 16px;
+  color: #fff;
 }
 .sf-brand__name {
+  font-family: var(--sf-font-display);
   font-weight: 700;
   font-size: 15px;
 }
@@ -166,18 +171,21 @@ h4 {
   transition: background 0.14s, color 0.14s;
 }
 .sf-nav__item:hover {
-  background: var(--sf-panel);
+  background: var(--sf-panel-2);
   color: var(--sf-text);
 }
 .sf-nav__item.is-active {
   background: var(--sf-primary-soft);
-  color: var(--sf-primary-2);
+  color: var(--sf-primary);
   font-weight: 600;
 }
 .sf-nav__icon {
   width: 18px;
   text-align: center;
   opacity: 0.9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sf-main {
@@ -238,6 +246,7 @@ h4 {
   margin-bottom: 20px;
 }
 .sf-page-title {
+  font-family: var(--sf-font-display);
   font-size: 22px;
 }
 .sf-page-desc {
@@ -257,6 +266,7 @@ h4 {
   border: 1px solid var(--sf-border-soft);
   border-radius: var(--sf-radius);
   margin-bottom: 20px;
+  box-shadow: var(--sf-shadow-sm);
 }
 .sf-step {
   display: flex;
@@ -271,12 +281,12 @@ h4 {
 }
 .sf-step.is-done {
   color: var(--sf-success);
-  border-color: rgba(62, 207, 142, 0.35);
+  border-color: rgba(22, 163, 74, 0.3);
 }
 .sf-step.is-active {
-  color: var(--sf-primary-2);
+  color: var(--sf-primary);
   background: var(--sf-primary-soft);
-  border-color: rgba(124, 92, 255, 0.45);
+  border-color: rgba(47, 85, 212, 0.35);
 }
 .sf-step__idx {
   width: 18px;
@@ -290,7 +300,7 @@ h4 {
 }
 .sf-step.is-done .sf-step__idx {
   background: var(--sf-success);
-  color: #06210f;
+  color: #fff;
 }
 .sf-step.is-active .sf-step__idx {
   background: var(--sf-primary);
@@ -327,11 +337,12 @@ h4 {
   padding: 18px;
 }
 .sf-card--hover {
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
   cursor: pointer;
 }
 .sf-card--hover:hover {
   border-color: var(--sf-primary);
+  box-shadow: var(--sf-shadow);
   transform: translateY(-2px);
 }
 .sf-card__head {
@@ -350,12 +361,43 @@ h4 {
   padding: 18px;
 }
 
+/* signature — viewfinder / storyboard frame corner marks */
+.sf-framed {
+  position: relative;
+}
+.sf-framed::before,
+.sf-framed::after,
+.sf-framed > .sf-framed__br,
+.sf-framed > .sf-framed__bl {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--sf-primary);
+  pointer-events: none;
+}
+.sf-framed::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 4px;
+}
+.sf-framed::after {
+  top: -1px;
+  right: -1px;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 4px;
+}
+
 /* stat card */
 .sf-stat__label {
   font-size: 12px;
   color: var(--sf-text-dim);
 }
 .sf-stat__value {
+  font-family: var(--sf-font-display);
   font-size: 26px;
   font-weight: 700;
   margin-top: 4px;
@@ -390,15 +432,15 @@ h4 {
 }
 .sf-badge--generating {
   color: var(--sf-status-generating);
-  border-color: rgba(74, 168, 255, 0.4);
+  border-color: rgba(14, 165, 233, 0.35);
 }
 .sf-badge--done {
   color: var(--sf-status-done);
-  border-color: rgba(62, 207, 142, 0.4);
+  border-color: rgba(22, 163, 74, 0.35);
 }
 .sf-badge--failed {
   color: var(--sf-status-failed);
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: rgba(220, 38, 38, 0.35);
 }
 
 .sf-tag {
@@ -407,7 +449,7 @@ h4 {
   border-radius: var(--sf-radius-sm);
   font-size: 11.5px;
   background: var(--sf-primary-soft);
-  color: var(--sf-primary-2);
+  color: var(--sf-primary);
   margin: 2px 4px 2px 0;
 }
 
@@ -419,7 +461,7 @@ h4 {
   padding: 8px 15px;
   border-radius: var(--sf-radius-sm);
   border: 1px solid var(--sf-border);
-  background: var(--sf-panel-2);
+  background: var(--sf-panel);
   color: var(--sf-text);
   font-size: 13px;
   font-weight: 600;
@@ -494,7 +536,7 @@ h4 {
 .sf-input,
 .sf-textarea {
   width: 100%;
-  background: var(--sf-bg);
+  background: var(--sf-panel);
   border: 1px solid var(--sf-border);
   border-radius: var(--sf-radius-sm);
   color: var(--sf-text);
@@ -507,6 +549,7 @@ h4 {
 .sf-textarea:focus {
   outline: none;
   border-color: var(--sf-primary);
+  box-shadow: 0 0 0 3px var(--sf-primary-soft);
 }
 .sf-textarea {
   min-height: 220px;
@@ -543,7 +586,7 @@ h4 {
   color: var(--sf-text);
 }
 .sf-tab.is-active {
-  color: var(--sf-primary-2);
+  color: var(--sf-primary);
   border-bottom-color: var(--sf-primary);
 }
 
@@ -619,7 +662,7 @@ h4 {
   padding: 10px 14px;
   border-radius: var(--sf-radius-sm);
   background: var(--sf-primary-soft);
-  border: 1px solid rgba(124, 92, 255, 0.35);
-  color: var(--sf-primary-2);
+  border: 1px solid rgba(47, 85, 212, 0.25);
+  color: var(--sf-primary);
   font-size: 12.5px;
 }

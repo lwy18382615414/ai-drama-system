@@ -1,3 +1,20 @@
+<template>
+  <button
+    type="button"
+    class="sf-btn"
+    :class="[
+      variant === 'primary' && 'sf-btn--primary',
+      variant === 'ghost' && 'sf-btn--ghost',
+      size === 'sm' && 'sf-btn--sm',
+    ]"
+    :title="hint ?? '演示按钮（未接后端）'"
+    @click="onClick"
+  >
+    <span v-if="icon">{{ icon }}</span>
+    {{ flashed ? '演示模式 ✓' : label }}
+  </button>
+</template>
+
 <script setup lang="ts">
 import { ref } from 'vue'
 
@@ -22,20 +39,3 @@ function onClick() {
   window.setTimeout(() => (flashed.value = false), 1400)
 }
 </script>
-
-<template>
-  <button
-    type="button"
-    class="sf-btn"
-    :class="[
-      variant === 'primary' && 'sf-btn--primary',
-      variant === 'ghost' && 'sf-btn--ghost',
-      size === 'sm' && 'sf-btn--sm',
-    ]"
-    :title="hint ?? '演示按钮（未接后端）'"
-    @click="onClick"
-  >
-    <span v-if="icon">{{ icon }}</span>
-    {{ flashed ? '演示模式 ✓' : label }}
-  </button>
-</template>

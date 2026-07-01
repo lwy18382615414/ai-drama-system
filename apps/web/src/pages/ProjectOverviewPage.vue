@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { h, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { episodes } from '@/mock'
+import type { DataTableColumns } from 'naive-ui'
+import { listEpisodes, type Episode } from '@/api/episodes'
+import { getApiErrorMessage } from '@/api/client'
+import { toPipelineStatus } from '@/utils/status'
 import { useProject } from '@/composables/useProject'
 import PipelineSteps from '@/components/PipelineSteps.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -10,8 +13,38 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import MockButton from '@/components/MockButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
+const message = useMessage()
 const { projectId, project } = useProject()
-const projectEpisodes = computed(() => episodes.filter((e) => e.projectId === projectId.value))
+const projectEpisodes = ref<Episode[]>([])
+
+async function loadEpisodes() {
+  if (!projectId.value) return
+  try {
+    projectEpisodes.value = await listEpisodes(projectId.value)
+  } catch (error) {
+    message.error(getApiErrorMessage(error))
+  }
+}
+
+onMounted(loadEpisodes)
+watch(projectId, loadEpisodes)
+
+const episodeColumns: DataTableColumns<Episode> = [
+  { title: '集数', key: 'episodeNo', render: (ep) => h('strong', `第 ${ep.episodeNo} 集`) },
+  { title: '标题', key: 'title', render: (ep) => h('strong', ep.title ?? '') },
+  { title: '梗概', key: 'summary' },
+  { title: '状态', key: 'status', render: (ep) => h(StatusBadge, { status: toPipelineStatus(ep.status) }) },
+  {
+    title: '',
+    key: 'actions',
+    render: (ep) =>
+      h(
+        RouterLink,
+        { to: { name: 'storyboards', params: { id: projectId.value, episodeId: ep.id } }, class: 'sf-muted' },
+        { default: () => '分镜 →' },
+      ),
+  },
+]
 </script>
 
 <template>
@@ -21,7 +54,7 @@ const projectEpisodes = computed(() => episodes.filter((e) => e.projectId === pr
         <h1 class="sf-page-title">{{ project.title }}</h1>
         <p class="sf-page-desc">{{ project.description }}</p>
       </div>
-      <StatusBadge :status="project.status" />
+      <StatusBadge :status="toPipelineStatus(project.status)" />
     </div>
 
     <PipelineSteps active-key="storyboard" />
@@ -34,7 +67,7 @@ const projectEpisodes = computed(() => episodes.filter((e) => e.projectId === pr
       <StatCard label="参考图进度" :value="project.imageCompletion + '%'" hint="角色参考图" icon="🖼️" />
     </div>
 
-    <PanelCard title="剧集">
+    <PanelCard title="剧集" framed>
       <template #actions>
         <RouterLink :to="{ name: 'episodes', params: { id: projectId } }">
           <MockButton label="剧集规划" size="sm" variant="ghost" />
@@ -42,31 +75,7 @@ const projectEpisodes = computed(() => episodes.filter((e) => e.projectId === pr
       </template>
 
       <EmptyState v-if="!projectEpisodes.length" icon="🎬" title="尚未规划剧集" desc="导入小说并提取事件后即可规划剧集。" />
-      <table v-else class="sf-table">
-        <thead>
-          <tr>
-            <th>集数</th>
-            <th>标题</th>
-            <th>梗概</th>
-            <th>状态</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="ep in projectEpisodes" :key="ep.id">
-            <td><strong>第 {{ ep.episodeNo }} 集</strong></td>
-            <td><strong>{{ ep.title }}</strong></td>
-            <td>{{ ep.synopsis }}</td>
-            <td><StatusBadge :status="ep.status" /></td>
-            <td>
-              <RouterLink
-                :to="{ name: 'storyboards', params: { id: projectId, episodeId: ep.id } }"
-                class="sf-muted"
-              >分镜 →</RouterLink>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <n-data-table v-else :columns="episodeColumns" :data="projectEpisodes" :bordered="false" :single-line="false" />
     </PanelCard>
   </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { pipelineSteps } from '@/mock'
+import { pipelineSteps } from '@/constants/pipeline'
 
 /**
  * Narrative-pipeline stepper. `activeKey` marks the current stage; every step

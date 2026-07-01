@@ -1,7 +1,12 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createDatabase, initializeDatabase } from '../../packages/database/index.js'
-import { MockImageProvider, MockStructuredTextProvider } from '../../packages/providers/index.js'
+import {
+  MockImageProvider,
+  MockStructuredTextProvider,
+  OpenAICompatibleTextProvider,
+  type StructuredTextProvider,
+} from '../../packages/providers/index.js'
 import { createAssetRoutes } from './routes/assets.js'
 import { createEventAgentRoutes } from './routes/event-agent.js'
 import { createEpisodePlannerRoutes } from './routes/episode-planner.js'
@@ -14,7 +19,7 @@ export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
   initializeDatabase(db)
 
-  const provider = new MockStructuredTextProvider()
+  const provider = createTextProvider()
   const imageProvider = new MockImageProvider()
   const app = new Hono()
 
@@ -34,4 +39,22 @@ export async function createApp() {
   app.route('/', createImageGenerationRoutes({ db, imageProvider }))
 
   return app
+}
+
+function createTextProvider(): StructuredTextProvider {
+  const apiKey = process.env.TEXT_PROVIDER_API_KEY
+  if (!apiKey) {
+    return new MockStructuredTextProvider()
+  }
+
+  const baseURL = process.env.TEXT_PROVIDER_BASE_URL
+  if (!baseURL) {
+    throw new Error('TEXT_PROVIDER_API_KEY is set but TEXT_PROVIDER_BASE_URL is missing')
+  }
+
+  return new OpenAICompatibleTextProvider({
+    baseURL,
+    apiKey,
+    model: process.env.TEXT_PROVIDER_MODEL ?? 'gpt-5.5',
+  })
 }
