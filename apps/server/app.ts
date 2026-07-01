@@ -5,6 +5,7 @@ import { createAssetRoutes } from './routes/assets.js'
 import { createEventAgentRoutes } from './routes/event-agent.js'
 import { createEpisodePlannerRoutes } from './routes/episode-planner.js'
 import { createScriptRoutes } from './routes/script.js'
+import { createStoryboardRoutes } from './routes/storyboard.js'
 
 export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
@@ -18,6 +19,7 @@ export async function createApp() {
   app.route('/', createEpisodePlannerRoutes({ db, provider }))
   app.route('/', createScriptRoutes({ db, provider }))
   app.route('/', createAssetRoutes({ db, provider }))
+  app.route('/', createStoryboardRoutes({ db, provider }))
 
   return app
 }

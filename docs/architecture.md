@@ -10,35 +10,86 @@ Input:
 - story outline
 - user idea
 
-Output:
+Current Phase 1 output:
 
-- short-drama script
+- chapter events
+- episode plans
+- adapted scripts
 - characters
 - scenes
+- props
 - storyboards
-- image prompts
-- video prompts
+
+Future media output, currently paused in Phase 2:
+
+- image prompts and refined visual prompts
 - generated images
-- generated videos
+- video prompts and generated videos
 - TTS audio
 - subtitles
 - final episode video
 
-## Main Pipeline
+## Current Completed Scope: Phase 1
 
-novel text
+Phase 1 is complete. It implements the backend narrative-production chain from imported novel chapters to editable storyboard records.
+
+### Phase 1 Main Chain
+
+novel_chapters
 ↓
-chapter event extraction
+novel_events
 ↓
-script rewriting
+episodes + episode_event_links
 ↓
-character / scene / prop extraction
+scripts
 ↓
-storyboard generation
+characters + scenes + props
 ↓
-image prompt / video prompt generation
+storyboards
+
+### Phase 1A EventAgent
+
+`novel_chapters → novel_events`
+
+Extracts structured story events from source chapter text.
+
+### Phase 1B EpisodePlannerAgent
+
+`novel_events → episodes + episode_event_links`
+
+Groups source events into short-drama episodes and records the ordered event links used by each episode.
+
+### Phase 1C ScriptAgent
+
+`episodes + linked novel_events → scripts`
+
+Rewrites each planned episode and its linked events into an adapted short-drama script.
+
+### Phase 1D ExtractAgent
+
+`scripts → characters + scenes + props`
+
+Extracts reusable production assets from scripts and links them back to the episode.
+
+### Phase 1E StoryboardAgent
+
+`scripts + characters + scenes + props → storyboards`
+
+Creates shot-level storyboards from the script and extracted assets.
+
+## Paused Scope: Phase 2
+
+Phase 2 is paused. Do not implement image generation, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests resuming Phase 2.
+
+Paused/future media pipeline:
+
+storyboards
+↓
+image prompt refinement
 ↓
 image generation
+↓
+video prompt refinement
 ↓
 video generation
 ↓
@@ -46,7 +97,9 @@ TTS / subtitle generation
 ↓
 single-shot composition
 ↓
-episode merge
+episode merge / final video export
+
+Storyboard rows may already contain `image_prompt` and `video_prompt` planning fields, but these fields do not mean Phase 2 provider calls are active.
 
 ## Core Layers
 
@@ -61,15 +114,27 @@ episode merge
 9. Object storage
 10. FFmpeg composition
 
+Phase 1 currently exercises:
+
+- API service
+- Agent orchestration
+- structured text provider adapter
+- task status persistence
+- database persistence
+- agent run logging
+
+Object storage, media provider adapters, FFmpeg composition, and final video export are Phase 2+ concerns and are currently paused.
+
 ## MVP Scope
 
 The MVP should prioritize:
 
 1. novel import
 2. event extraction
-3. script generation
-4. asset extraction
-5. storyboard generation
-6. editable storyboard workbench
+3. episode planning
+4. script generation
+5. asset extraction
+6. storyboard generation
+7. editable storyboard workbench
 
-Do not start with complex canvas, timeline, or full video editor.
+Do not start with complex canvas, timeline, full video editor, or media-generation pipeline work unless explicitly requested.

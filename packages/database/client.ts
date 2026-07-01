@@ -303,6 +303,47 @@ export function initializeDatabase(db: DatabaseClient) {
   `)
 
   db.run(sql`
+    CREATE TABLE IF NOT EXISTS storyboards (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id),
+      episode_id TEXT NOT NULL REFERENCES episodes(id),
+      shot_no INTEGER NOT NULL,
+      duration INTEGER NOT NULL,
+      scene_id TEXT REFERENCES scenes(id),
+      character_ids_json TEXT NOT NULL DEFAULT '[]',
+      prop_ids_json TEXT NOT NULL DEFAULT '[]',
+      script_section_no INTEGER,
+      shot_type TEXT NOT NULL,
+      camera_angle TEXT,
+      camera_movement TEXT,
+      action TEXT NOT NULL,
+      dialogue_json TEXT NOT NULL DEFAULT '[]',
+      narration TEXT,
+      emotion TEXT,
+      image_prompt TEXT NOT NULL,
+      video_prompt TEXT NOT NULL,
+      first_frame_image_url TEXT,
+      last_frame_image_url TEXT,
+      video_url TEXT,
+      tts_audio_url TEXT,
+      subtitle_url TEXT,
+      composed_video_url TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+
+  runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN prop_ids_json TEXT NOT NULL DEFAULT '[]'`)
+  runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN script_section_no INTEGER`)
+  runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN emotion TEXT`)
+
+  db.run(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS storyboards_episode_shot_no_unique
+      ON storyboards(episode_id, shot_no)
+  `)
+
+  db.run(sql`
     CREATE TABLE IF NOT EXISTS agent_runs (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),

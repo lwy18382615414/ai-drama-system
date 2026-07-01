@@ -8,6 +8,16 @@ The system converts novels or story outlines into structured short-drama product
 
 novel text → chapter events → adapted script → characters/scenes/props → storyboards → image prompts → video prompts → image/video generation tasks → TTS/subtitles → FFmpeg composition → final episode video.
 
+## Current Implementation Status
+
+Phase 1 is complete. The completed backend narrative pipeline is:
+
+novel_chapters → novel_events → episodes + episode_event_links → scripts → characters/scenes/props → storyboards.
+
+Phase 2 is paused. Do not implement image generation, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests resuming Phase 2.
+
+See `docs/phase-roadmap.md` for the current phase roadmap.
+
 ## Core Architecture
 
 Use this architecture unless the user explicitly asks to change it:
@@ -58,6 +68,7 @@ Before implementing related modules, read these files:
 - `docs/agent-workflow.md`
 - `docs/api-design.md`
 - `docs/provider-adapter.md`
+- `docs/phase-roadmap.md`
 
 ## Done Definition
 

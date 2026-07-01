@@ -52,6 +52,40 @@ export class MockStructuredTextProvider implements StructuredTextProvider {
   }
 
   private defaultResponse<T>(request: GenerateStructuredJsonRequest<T>): unknown {
+    if (request.schemaName === 'StoryboardAgentOutput') {
+      const sceneIds = Array.isArray(request.metadata?.sceneIds)
+        ? request.metadata.sceneIds.map(String)
+        : ['mock-scene']
+      const characterIds = Array.isArray(request.metadata?.characterIds)
+        ? request.metadata.characterIds.map(String)
+        : []
+      const propIds = Array.isArray(request.metadata?.propIds)
+        ? request.metadata.propIds.map(String)
+        : []
+
+      return {
+        storyboards: [
+          {
+            shot_no: 1,
+            duration: 5,
+            scene_id: sceneIds[0] ?? 'mock-scene',
+            character_ids: characterIds.slice(0, 1),
+            prop_ids: propIds.slice(0, 1),
+            script_section_no: 1,
+            shot_type: 'medium',
+            camera_angle: 'eye_level',
+            camera_movement: 'static',
+            action: 'The protagonist enters the central location and faces the dramatic situation.',
+            dialogue: [],
+            narration: 'A moment of tension begins.',
+            emotion: 'tense',
+            image_prompt: 'Realistic medium shot of a protagonist entering a dramatic short-drama location, cinematic lighting, expressive body language, production-ready composition.',
+            video_prompt: 'The protagonist enters the location with a determined expression, camera static at eye level, short-drama pacing, subtle dramatic tension.',
+          },
+        ],
+      }
+    }
+
     if (request.schemaName === 'ExtractAgentOutput') {
       return {
         characters: [

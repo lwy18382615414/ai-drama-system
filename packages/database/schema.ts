@@ -229,6 +229,42 @@ export const episodePropLinks = sqliteTable(
   }),
 )
 
+export const storyboards = sqliteTable(
+  'storyboards',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    episodeId: text('episode_id').notNull().references(() => episodes.id),
+    shotNo: integer('shot_no').notNull(),
+    duration: integer('duration').notNull(),
+    sceneId: text('scene_id').references(() => scenes.id),
+    characterIdsJson: text('character_ids_json').notNull().default('[]'),
+    propIdsJson: text('prop_ids_json').notNull().default('[]'),
+    scriptSectionNo: integer('script_section_no'),
+    shotType: text('shot_type').notNull(),
+    cameraAngle: text('camera_angle'),
+    cameraMovement: text('camera_movement'),
+    action: text('action').notNull(),
+    dialogueJson: text('dialogue_json').notNull().default('[]'),
+    narration: text('narration'),
+    emotion: text('emotion'),
+    imagePrompt: text('image_prompt').notNull(),
+    videoPrompt: text('video_prompt').notNull(),
+    firstFrameImageUrl: text('first_frame_image_url'),
+    lastFrameImageUrl: text('last_frame_image_url'),
+    videoUrl: text('video_url'),
+    ttsAudioUrl: text('tts_audio_url'),
+    subtitleUrl: text('subtitle_url'),
+    composedVideoUrl: text('composed_video_url'),
+    status: text('status').notNull().default('draft'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    episodeShotNoUnique: uniqueIndex('storyboards_episode_shot_no_unique').on(table.episodeId, table.shotNo),
+  }),
+)
+
 export const agentRuns = sqliteTable('agent_runs', {
   id: text('id').primaryKey(),
   projectId: text('project_id').notNull().references(() => projects.id),
@@ -277,6 +313,7 @@ export const schema = {
   episodeCharacterLinks,
   episodeSceneLinks,
   episodePropLinks,
+  storyboards,
   agentRuns,
   generationTasks,
 }
@@ -293,5 +330,6 @@ export type Prop = typeof props.$inferSelect
 export type EpisodeCharacterLink = typeof episodeCharacterLinks.$inferSelect
 export type EpisodeSceneLink = typeof episodeSceneLinks.$inferSelect
 export type EpisodePropLink = typeof episodePropLinks.$inferSelect
+export type Storyboard = typeof storyboards.$inferSelect
 export type AgentRun = typeof agentRuns.$inferSelect
 export type GenerationTask = typeof generationTasks.$inferSelect
