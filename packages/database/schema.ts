@@ -286,6 +286,8 @@ export const generationTasks = sqliteTable('generation_tasks', {
   projectId: text('project_id').notNull().references(() => projects.id),
   episodeId: text('episode_id'),
   storyboardId: text('storyboard_id'),
+  targetType: text('target_type'),
+  targetId: text('target_id'),
   taskType: text('task_type').notNull(),
   provider: text('provider'),
   model: text('model'),
@@ -296,6 +298,23 @@ export const generationTasks = sqliteTable('generation_tasks', {
   errorMessage: text('error_message'),
   startedAt: text('started_at'),
   completedAt: text('completed_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const assets = sqliteTable('assets', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  assetType: text('asset_type').notNull(),
+  targetType: text('target_type').notNull(),
+  targetId: text('target_id').notNull(),
+  generationTaskId: text('generation_task_id').references(() => generationTasks.id),
+  url: text('url').notNull(),
+  provider: text('provider'),
+  model: text('model'),
+  prompt: text('prompt'),
+  metadataJson: text('metadata_json').notNull().default('{}'),
+  status: text('status').notNull().default('active'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 })
@@ -316,6 +335,7 @@ export const schema = {
   storyboards,
   agentRuns,
   generationTasks,
+  assets,
 }
 
 export type Project = typeof projects.$inferSelect
@@ -333,3 +353,4 @@ export type EpisodePropLink = typeof episodePropLinks.$inferSelect
 export type Storyboard = typeof storyboards.$inferSelect
 export type AgentRun = typeof agentRuns.$inferSelect
 export type GenerationTask = typeof generationTasks.$inferSelect
+export type Asset = typeof assets.$inferSelect

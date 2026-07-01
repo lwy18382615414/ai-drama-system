@@ -367,6 +367,8 @@ export function initializeDatabase(db: DatabaseClient) {
       project_id TEXT NOT NULL REFERENCES projects(id),
       episode_id TEXT,
       storyboard_id TEXT,
+      target_type TEXT,
+      target_id TEXT,
       task_type TEXT NOT NULL,
       provider TEXT,
       model TEXT,
@@ -377,6 +379,28 @@ export function initializeDatabase(db: DatabaseClient) {
       error_message TEXT,
       started_at TEXT,
       completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `)
+
+  runOptionalSchemaUpdate(db, sql`ALTER TABLE generation_tasks ADD COLUMN target_type TEXT`)
+  runOptionalSchemaUpdate(db, sql`ALTER TABLE generation_tasks ADD COLUMN target_id TEXT`)
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id),
+      asset_type TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      generation_task_id TEXT REFERENCES generation_tasks(id),
+      url TEXT NOT NULL,
+      provider TEXT,
+      model TEXT,
+      prompt TEXT,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )

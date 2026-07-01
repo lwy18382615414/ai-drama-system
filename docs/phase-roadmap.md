@@ -4,11 +4,13 @@
 
 Phase 1 is complete.
 
-Phase 2 is paused.
+Phase 2B is active for the character reference image generation loop, built on the Phase 2A ImageProvider + image task infrastructure.
+
+Later Phase 2 media generation remains paused.
 
 Phase 3+ has not started.
 
-Do not implement image generation, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests resuming Phase 2.
+Do not implement real image providers, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2B.
 
 ## Phase 1: Completed Backend Narrative Pipeline
 
@@ -70,7 +72,47 @@ Purpose:
 - Convert scripts and extracted assets into ordered shot-level storyboards.
 - Persist storyboard planning fields, including `image_prompt` and `video_prompt`, without starting media generation.
 
-## Phase 2: Paused Media Generation Pipeline
+## Phase 2A: Active ImageProvider + Image Task Infrastructure
+
+Status: complete.
+
+Scope:
+
+- Add `ImageProvider` and `MockImageProvider`.
+- Create image `generation_tasks` with `task_type = image_generation`.
+- Track polymorphic image targets through `target_type` and `target_id`.
+- Record generated image assets in `assets`.
+- Update active image URL fields for:
+  - `character_reference_image`
+  - `scene_reference_image`
+  - `storyboard_first_frame`
+
+Boundary notes:
+
+- Only `MockImageProvider` is active.
+- No real image model integration is part of Phase 2A.
+- Existing storyboard `image_prompt` remains a planning field used as input to mock image task infrastructure.
+
+## Phase 2B: Active Character Reference Image Loop
+
+Status: active.
+
+Scope:
+
+- Add `POST /api/characters/:characterId/generate-image` for one character at a time.
+- Build prompts from character name, role, appearance, personality, and project `visual_style`.
+- Use the existing async `generation_tasks` image task lifecycle.
+- Use `MockImageProvider` only.
+- Write `assets.asset_type = character_reference_image`.
+- Update `characters.reference_image_url` when the task completes.
+- Support `force=true` regeneration while avoiding duplicate work when a reference image already exists.
+
+Boundary notes:
+
+- Phase 2B does not activate scene image, storyboard first-frame, video, TTS, subtitle, FFmpeg, or final export workflows.
+- No real image model integration is part of Phase 2B.
+
+## Later Phase 2: Paused Media Generation Pipeline
 
 Status: paused.
 
@@ -78,22 +120,16 @@ Do not implement unless explicitly requested.
 
 Potential future areas:
 
+- real image provider integration
 - image prompt refinement
-- image generation
 - video prompt refinement
 - video generation
 - TTS
 - subtitles
 - FFmpeg composition
 - final episode video export
-- media asset storage integration
-- media task orchestration
-
-Boundary notes:
-
-- Existing storyboard `image_prompt` and `video_prompt` fields are Phase 1 planning outputs.
-- Existing media URL columns are reserved for future media workflows.
-- No provider calls for image, video, audio, subtitle, or composition work should be added while Phase 2 is paused.
+- object storage integration
+- bulk media task orchestration
 
 ## Phase 3+
 

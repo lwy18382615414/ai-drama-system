@@ -150,6 +150,16 @@ export async function getProjectCharacters(db: DatabaseClient, projectId: string
   return { project, characters: rows.map(serializeCharacter) }
 }
 
+export async function getCharacter(db: DatabaseClient, characterId: string) {
+  const [character] = await db.select().from(characters).where(eq(characters.id, characterId)).limit(1)
+
+  if (!character) {
+    return null
+  }
+
+  return { character: serializeCharacter(character) }
+}
+
 export async function getProjectScenes(db: DatabaseClient, projectId: string) {
   const project = await getProject(db, projectId)
 
@@ -159,6 +169,16 @@ export async function getProjectScenes(db: DatabaseClient, projectId: string) {
 
   const rows = await db.select().from(scenes).where(eq(scenes.projectId, projectId)).orderBy(scenes.name)
   return { project, scenes: rows }
+}
+
+export async function getScene(db: DatabaseClient, sceneId: string) {
+  const [scene] = await db.select().from(scenes).where(eq(scenes.id, sceneId)).limit(1)
+
+  if (!scene) {
+    return null
+  }
+
+  return { scene: { ...scene, reference_image_url: scene.referenceImageUrl } }
 }
 
 export async function getProjectProps(db: DatabaseClient, projectId: string) {
@@ -333,6 +353,7 @@ function serializeCharacter(character: typeof characters.$inferSelect) {
     ...character,
     aliasJson: parseStringArray(character.aliasJson),
     relationshipJson: parseUnknownArray(character.relationshipJson),
+    reference_image_url: character.referenceImageUrl,
   }
 }
 

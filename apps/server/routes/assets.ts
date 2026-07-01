@@ -5,10 +5,12 @@ import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
 import {
   AssetExtractionServiceError,
+  getCharacter,
   getEpisodeAssets,
   getProjectCharacters,
   getProjectProps,
   getProjectScenes,
+  getScene,
   startAssetExtraction,
   StartAssetExtractionRequestSchema,
 } from '../services/asset-extraction-service.js'
@@ -75,12 +77,40 @@ export function createAssetRoutes(deps: AssetRouteDeps) {
     }
   })
 
+  app.get('/api/characters/:characterId', async (c) => {
+    try {
+      const result = await getCharacter(deps.db, c.req.param('characterId'))
+
+      if (!result) {
+        return c.json({ error: 'Character not found' }, 404)
+      }
+
+      return c.json(result)
+    } catch (error) {
+      return handleServiceError(c, error)
+    }
+  })
+
   app.get('/api/projects/:projectId/scenes', async (c) => {
     try {
       const result = await getProjectScenes(deps.db, c.req.param('projectId'))
 
       if (!result) {
         return c.json({ error: 'Project not found' }, 404)
+      }
+
+      return c.json(result)
+    } catch (error) {
+      return handleServiceError(c, error)
+    }
+  })
+
+  app.get('/api/scenes/:sceneId', async (c) => {
+    try {
+      const result = await getScene(deps.db, c.req.param('sceneId'))
+
+      if (!result) {
+        return c.json({ error: 'Scene not found' }, 404)
       }
 
       return c.json(result)

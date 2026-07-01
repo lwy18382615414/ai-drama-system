@@ -2,13 +2,13 @@
 
 ## Overview
 
-This document records the completed Phase 1 API surface for the backend narrative pipeline.
+This document records the completed Phase 1 API surface, the Phase 2A image task infrastructure, and the active Phase 2B character reference image loop.
 
 Phase 1 is complete:
 
 novel_chapters → novel_events → episodes + episode_event_links → scripts → characters/scenes/props → storyboards
 
-Phase 2 media-generation APIs are paused. Do not add or document active image generation, video generation, TTS, subtitle, FFmpeg composition, or final video export endpoints unless Phase 2 is explicitly resumed.
+Phase 2A provides `ImageProvider`, mock image generation tasks, and image asset records. Phase 2B activates only the character reference image loop. Later Phase 2 APIs for real image providers, scene image generation, storyboard first-frame generation, video generation, TTS, subtitle, FFmpeg composition, and final video export remain paused.
 
 ## Route Mounting
 
@@ -19,6 +19,7 @@ The Hono app mounts the Phase 1 route groups in `apps/server/app.ts`:
 - Script routes at the root app path with full `/api/...` route definitions
 - Asset extraction routes at the root app path with full `/api/...` route definitions
 - Storyboard routes at the root app path with full `/api/...` route definitions
+- Image generation routes at the root app path with full `/api/...` route definitions
 
 ## Health
 
@@ -150,6 +151,10 @@ Returns:
 
 Lists project characters.
 
+### `GET /api/characters/:characterId`
+
+Fetches one character, including `referenceImageUrl` and `reference_image_url` for the current character reference image URL.
+
 ### `GET /api/projects/:projectId/scenes`
 
 Lists project scenes.
@@ -195,13 +200,69 @@ Purpose:
 
 - supports editable storyboard workflow after generation
 
-## Phase 2 API Boundary
+## Phase 2A Image Generation Routes
 
-No active Phase 2 media-generation endpoints are part of the current completed API surface.
+Implemented by `apps/server/routes/image-generation.ts`.
 
-Do not add routes for the following unless the user explicitly requests resuming Phase 2:
+### `POST /api/projects/:projectId/generate-image`
 
-- image generation
+Starts a mock image generation task for one supported target.
+
+Supported `target_type` values:
+
+- `character_reference_image`
+- `scene_reference_image`
+- `storyboard_first_frame`
+
+Purpose:
+
+- creates a `generation_tasks` row with `task_type = image_generation`
+- calls `MockImageProvider`
+- writes an `assets` row
+- updates the target URL field
+- returns `202 Accepted`
+
+## Phase 2B Character Reference Image Routes
+
+Implemented by `apps/server/routes/image-generation.ts` and `apps/server/services/image-generation-service.ts`.
+
+### `POST /api/characters/:characterId/generate-image`
+
+Starts a mock character reference image generation task for one character.
+
+Purpose:
+
+- reads `characters.name`, `role`, `appearance`, `personality`, and project `visual_style`
+- creates a `generation_tasks` row with `task_type = image_generation`
+- calls `MockImageProvider`
+- writes an `assets` row with `asset_type = character_reference_image`
+- updates `characters.reference_image_url` when the task completes
+- returns `202 Accepted` with `{ taskId, status }`
+
+Notes:
+
+- Supports `force` through request body or query string.
+- If `force` is false and the character already has `reference_image_url`, the service does not start duplicate generation.
+- This endpoint does not activate scene image, storyboard first-frame, video, TTS, subtitle, FFmpeg, or final export workflows.
+
+Notes:
+
+- Supports `force` through request body or query string.
+- Does not call real image models.
+
+### `GET /api/generation-tasks/:taskId`
+
+Fetches a generation task by ID for polling.
+
+### `GET /api/projects/:projectId/assets`
+
+Lists generated asset records for a project.
+
+## Later Phase 2 API Boundary
+
+Do not add routes for the following unless the user explicitly requests expanding Phase 2 beyond Phase 2B:
+
+- real image provider integration
 - video generation
 - TTS generation
 - subtitle generation

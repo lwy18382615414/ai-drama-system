@@ -2,9 +2,9 @@
 
 ## Current Status
 
-Phase 1 is complete. The database currently supports the completed backend narrative pipeline through storyboard generation.
+Phase 1 is complete. The database supports the completed backend narrative pipeline through storyboard generation.
 
-Phase 2 media-generation usage is paused. Media-related URL fields may exist in Phase 1 tables, but image/video/TTS/subtitle/composition workflows should not be treated as active unless Phase 2 is explicitly resumed.
+Phase 2A provides image-provider task infrastructure. Phase 2B activates only the character reference image loop on top of that infrastructure. The database records mock image generation tasks, generated character reference image assets, and active image URLs for characters. Later Phase 2 media workflows remain paused.
 
 ## Phase 1 Data Flow
 
@@ -28,6 +28,7 @@ Operational logging and task tracking:
 
 - `generation_tasks` tracks long-running generation task status.
 - `agent_runs` logs Agent inputs, outputs, status, and errors.
+- `assets` records generated media asset provenance and active character image URLs for Phase 2B.
 
 ## Core Phase 1 Tables
 
@@ -46,6 +47,7 @@ Operational logging and task tracking:
 - storyboards
 - generation_tasks
 - agent_runs
+- assets
 
 ## Important Tables
 
@@ -207,9 +209,10 @@ Important constraint:
 
 - unique `(project_id, name)`
 
-Phase 2 note:
+Phase 2B note:
 
-- `reference_image_url` and `voice_id` are reserved for future visual/audio workflows and are not active media-generation requirements while Phase 2 is paused.
+- `reference_image_url` is active for the character reference image generation loop and is updated after the mock image task completes.
+- `voice_id` remains reserved for future audio workflows.
 
 ### scenes
 
@@ -369,6 +372,8 @@ Fields:
 - project_id
 - episode_id
 - storyboard_id
+- target_type
+- target_id
 - task_type
 - provider
 - model
@@ -381,6 +386,33 @@ Fields:
 - completed_at
 - created_at
 - updated_at
+
+### assets
+
+Generated asset records for Phase 2A and future media workflows.
+
+Fields:
+
+- id
+- project_id
+- asset_type
+- target_type
+- target_id
+- generation_task_id
+- url
+- provider
+- model
+- prompt
+- metadata_json
+- status
+- created_at
+- updated_at
+
+Phase 2A supported target types:
+
+- `character_reference_image`
+- `scene_reference_image`
+- `storyboard_first_frame`
 
 ### agent_runs
 

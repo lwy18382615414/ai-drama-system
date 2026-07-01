@@ -1,17 +1,19 @@
 import { Hono } from 'hono'
 import { createDatabase, initializeDatabase } from '../../packages/database/index.js'
-import { MockStructuredTextProvider } from '../../packages/providers/index.js'
+import { MockImageProvider, MockStructuredTextProvider } from '../../packages/providers/index.js'
 import { createAssetRoutes } from './routes/assets.js'
 import { createEventAgentRoutes } from './routes/event-agent.js'
 import { createEpisodePlannerRoutes } from './routes/episode-planner.js'
 import { createScriptRoutes } from './routes/script.js'
 import { createStoryboardRoutes } from './routes/storyboard.js'
+import { createImageGenerationRoutes } from './routes/image-generation.js'
 
 export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
   initializeDatabase(db)
 
   const provider = new MockStructuredTextProvider()
+  const imageProvider = new MockImageProvider()
   const app = new Hono()
 
   app.get('/health', (c) => c.json({ ok: true }))
@@ -20,6 +22,7 @@ export async function createApp() {
   app.route('/', createScriptRoutes({ db, provider }))
   app.route('/', createAssetRoutes({ db, provider }))
   app.route('/', createStoryboardRoutes({ db, provider }))
+  app.route('/', createImageGenerationRoutes({ db, imageProvider }))
 
   return app
 }
