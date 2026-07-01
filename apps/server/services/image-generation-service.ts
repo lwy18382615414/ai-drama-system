@@ -1,12 +1,16 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import {
   assets,
   characters,
+  episodeCharacterLinks,
+  episodeSceneLinks,
+  episodes,
   generationTasks,
   projects,
+  props,
   scenes,
   storyboards,
 } from '../../../packages/database/index.js'
@@ -45,10 +49,60 @@ export const StartSceneReferenceImageRequestSchema = z.object({
   options: ImageGenerationOptionsSchema,
 })
 
+export const StartStoryboardFirstFrameRequestSchema = z.object({
+  force: z.boolean().optional(),
+  options: ImageGenerationOptionsSchema,
+})
+
+export const BatchImageGenerationRequestSchema = z.object({
+  force: z.boolean().optional(),
+  options: ImageGenerationOptionsSchema,
+})
+
 export type ImageTargetType = z.infer<typeof ImageTargetTypeSchema>
 export type StartImageGenerationRequest = z.infer<typeof StartImageGenerationRequestSchema>
 export type StartCharacterReferenceImageRequest = z.infer<typeof StartCharacterReferenceImageRequestSchema>
 export type StartSceneReferenceImageRequest = z.infer<typeof StartSceneReferenceImageRequestSchema>
+export type StartStoryboardFirstFrameRequest = z.infer<typeof StartStoryboardFirstFrameRequestSchema>
+export type BatchImageGenerationRequest = z.infer<typeof BatchImageGenerationRequestSchema>
+
+type ImageGenerationOptions = StartImageGenerationRequest['options']
+
+export interface BatchTargetResult {
+  targetId: string
+  status: 'completed' | 'skipped' | 'failed'
+  taskId?: string
+  imageUrl?: string
+  error?: string
+}
+
+export interface BatchImageGenerationSummary {
+  total: number
+  completed: number
+  skipped: number
+  failed: number
+}
+
+export interface BatchImageGenerationResult {
+  episodeId: string
+  targetType: ImageTargetType
+  summary: BatchImageGenerationSummary
+  results: BatchTargetResult[]
+}
+
+export interface ImageAssetStatusCounts {
+  total: number
+  completed: number
+  missing: number
+  failed: number
+}
+
+export interface EpisodeImageGenerationStatus {
+  episodeId: string
+  characters: ImageAssetStatusCounts
+  scenes: ImageAssetStatusCounts
+  storyboardFirstFrames: ImageAssetStatusCounts
+}
 
 export class ImageGenerationServiceError extends Error {
   constructor(
@@ -120,6 +174,29 @@ export async function startSceneReferenceImageGeneration(
   })
 }
 
+export async function startStoryboardFirstFrameGeneration(
+  deps: ImageGenerationServiceDeps,
+  storyboardId: string,
+  request: StartStoryboardFirstFrameRequest,
+) {
+  const [storyboard] = await deps.db
+    .select({ projectId: storyboards.projectId })
+    .from(storyboards)
+    .where(eq(storyboards.id, storyboardId))
+    .limit(1)
+
+  if (!storyboard) {
+    throw new ImageGenerationServiceError(`Storyboard not found: ${storyboardId}`, 404)
+  }
+
+  return startImageGeneration(deps, storyboard.projectId, {
+    target_type: 'storyboard_first_frame',
+    target_id: storyboardId,
+    force: request.force,
+    options: request.options,
+  })
+}
+
 export async function startImageGeneration(
   deps: ImageGenerationServiceDeps,
   projectId: string,
@@ -156,37 +233,15 @@ export async function startImageGeneration(
     }
   }
 
-  const now = new Date().toISOString()
-  const taskId = nanoid()
-  const input = {
+  const taskId = await insertPendingImageTask(deps, {
     projectId,
     targetType: target.targetType,
     targetId: target.targetId,
     prompt: target.prompt,
-    options: request.options ?? {},
-    force: request.force ?? false,
-    taskId,
-  }
-
-  await deps.db.insert(generationTasks).values({
-    id: taskId,
-    projectId,
+    options: request.options,
+    force: request.force,
     episodeId: target.episodeId ?? null,
     storyboardId: target.storyboardId ?? null,
-    targetType: target.targetType,
-    targetId: target.targetId,
-    taskType: 'image_generation',
-    provider: deps.imageProvider.name,
-    model: deps.imageProvider.model,
-    inputJson: JSON.stringify(input),
-    outputJson: null,
-    status: 'pending',
-    retryCount: 0,
-    errorMessage: null,
-    startedAt: null,
-    completedAt: null,
-    createdAt: now,
-    updatedAt: now,
   })
 
   setTimeout(() => {
@@ -202,6 +257,379 @@ export async function startImageGeneration(
   }, 0)
 
   return { taskId, status: 'pending' as const }
+}
+
+async function insertPendingImageTask(
+  deps: ImageGenerationServiceDeps,
+  params: {
+    projectId: string
+    targetType: ImageTargetType
+    targetId: string
+    prompt: string
+    options?: ImageGenerationOptions
+    force?: boolean
+    episodeId?: string | null
+    storyboardId?: string | null
+  },
+): Promise<string> {
+  const now = new Date().toISOString()
+  const taskId = nanoid()
+  const input = {
+    projectId: params.projectId,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    prompt: params.prompt,
+    options: params.options ?? {},
+    force: params.force ?? false,
+    taskId,
+  }
+
+  await deps.db.insert(generationTasks).values({
+    id: taskId,
+    projectId: params.projectId,
+    episodeId: params.episodeId ?? null,
+    storyboardId: params.storyboardId ?? null,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    taskType: 'image_generation',
+    provider: deps.imageProvider.name,
+    model: deps.imageProvider.model,
+    inputJson: JSON.stringify(input),
+    outputJson: null,
+    status: 'pending',
+    retryCount: 0,
+    errorMessage: null,
+    startedAt: null,
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  })
+
+  return taskId
+}
+
+interface BatchTargetSpec {
+  targetId: string
+  prompt: string
+  existingUrl: string | null
+  episodeId?: string | null
+  storyboardId?: string | null
+}
+
+async function generateBatch(
+  deps: ImageGenerationServiceDeps,
+  params: {
+    episodeId: string
+    projectId: string
+    targetType: ImageTargetType
+    force: boolean
+    options?: ImageGenerationOptions
+    specs: BatchTargetSpec[]
+  },
+): Promise<BatchImageGenerationResult> {
+  const results: BatchTargetResult[] = []
+
+  for (const spec of params.specs) {
+    const result = await generateOneTarget(deps, {
+      projectId: params.projectId,
+      targetType: params.targetType,
+      targetId: spec.targetId,
+      prompt: spec.prompt,
+      existingUrl: spec.existingUrl,
+      force: params.force,
+      options: params.options,
+      episodeId: spec.episodeId ?? params.episodeId,
+      storyboardId: spec.storyboardId,
+    })
+    results.push(result)
+  }
+
+  return {
+    episodeId: params.episodeId,
+    targetType: params.targetType,
+    summary: {
+      total: results.length,
+      completed: results.filter((r) => r.status === 'completed').length,
+      skipped: results.filter((r) => r.status === 'skipped').length,
+      failed: results.filter((r) => r.status === 'failed').length,
+    },
+    results,
+  }
+}
+
+async function generateOneTarget(
+  deps: ImageGenerationServiceDeps,
+  params: {
+    projectId: string
+    targetType: ImageTargetType
+    targetId: string
+    prompt: string
+    existingUrl: string | null
+    force: boolean
+    options?: ImageGenerationOptions
+    episodeId?: string | null
+    storyboardId?: string | null
+  },
+): Promise<BatchTargetResult> {
+  if (params.force !== true && params.existingUrl) {
+    return { targetId: params.targetId, status: 'skipped' }
+  }
+
+  const taskId = await insertPendingImageTask(deps, {
+    projectId: params.projectId,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    prompt: params.prompt,
+    options: params.options,
+    force: params.force,
+    episodeId: params.episodeId ?? null,
+    storyboardId: params.storyboardId ?? null,
+  })
+
+  const outcome = await executeImageGeneration(deps, {
+    taskId,
+    projectId: params.projectId,
+    targetType: params.targetType,
+    targetId: params.targetId,
+    prompt: params.prompt,
+    options: params.options ?? {},
+    force: params.force,
+  })
+
+  if (outcome.success) {
+    return { targetId: params.targetId, status: 'completed', taskId, imageUrl: outcome.imageUrl }
+  }
+
+  return { targetId: params.targetId, status: 'failed', taskId, error: outcome.error }
+}
+
+async function resolveEpisode(db: DatabaseClient, episodeId: string) {
+  const [episode] = await db
+    .select({ id: episodes.id, projectId: episodes.projectId })
+    .from(episodes)
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+
+  return episode ?? null
+}
+
+export async function generateEpisodeCharacterImages(
+  deps: ImageGenerationServiceDeps,
+  episodeId: string,
+  request: BatchImageGenerationRequest,
+): Promise<BatchImageGenerationResult> {
+  const episode = await resolveEpisode(deps.db, episodeId)
+
+  if (!episode) {
+    throw new ImageGenerationServiceError(`Episode not found: ${episodeId}`, 404)
+  }
+
+  const [project] = await deps.db
+    .select({ visualStyle: projects.visualStyle })
+    .from(projects)
+    .where(eq(projects.id, episode.projectId))
+    .limit(1)
+
+  const characterRows = await deps.db
+    .select({ character: characters })
+    .from(episodeCharacterLinks)
+    .innerJoin(characters, eq(episodeCharacterLinks.characterId, characters.id))
+    .where(eq(episodeCharacterLinks.episodeId, episodeId))
+    .orderBy(characters.name)
+
+  const specs: BatchTargetSpec[] = characterRows.map(({ character }) => ({
+    targetId: character.id,
+    existingUrl: character.referenceImageUrl,
+    prompt: compactPrompt([
+      character.name,
+      character.role,
+      character.appearance,
+      character.personality,
+      project?.visualStyle ? `Project visual style: ${project.visualStyle}` : null,
+    ]),
+  }))
+
+  return generateBatch(deps, {
+    episodeId,
+    projectId: episode.projectId,
+    targetType: 'character_reference_image',
+    force: request.force ?? false,
+    options: request.options,
+    specs,
+  })
+}
+
+export async function generateEpisodeSceneImages(
+  deps: ImageGenerationServiceDeps,
+  episodeId: string,
+  request: BatchImageGenerationRequest,
+): Promise<BatchImageGenerationResult> {
+  const episode = await resolveEpisode(deps.db, episodeId)
+
+  if (!episode) {
+    throw new ImageGenerationServiceError(`Episode not found: ${episodeId}`, 404)
+  }
+
+  const [project] = await deps.db
+    .select({ visualStyle: projects.visualStyle })
+    .from(projects)
+    .where(eq(projects.id, episode.projectId))
+    .limit(1)
+
+  const sceneRows = await deps.db
+    .select({ scene: scenes })
+    .from(episodeSceneLinks)
+    .innerJoin(scenes, eq(episodeSceneLinks.sceneId, scenes.id))
+    .where(eq(episodeSceneLinks.episodeId, episodeId))
+    .orderBy(scenes.name)
+
+  const specs: BatchTargetSpec[] = sceneRows.map(({ scene }) => ({
+    targetId: scene.id,
+    existingUrl: scene.referenceImageUrl,
+    prompt: compactPrompt([
+      scene.visualPrompt,
+      scene.name,
+      scene.description,
+      scene.locationType,
+      scene.visualStyle,
+      project?.visualStyle ? `Project visual style: ${project.visualStyle}` : null,
+    ]),
+  }))
+
+  return generateBatch(deps, {
+    episodeId,
+    projectId: episode.projectId,
+    targetType: 'scene_reference_image',
+    force: request.force ?? false,
+    options: request.options,
+    specs,
+  })
+}
+
+export async function generateEpisodeStoryboardFirstFrames(
+  deps: ImageGenerationServiceDeps,
+  episodeId: string,
+  request: BatchImageGenerationRequest,
+): Promise<BatchImageGenerationResult> {
+  const episode = await resolveEpisode(deps.db, episodeId)
+
+  if (!episode) {
+    throw new ImageGenerationServiceError(`Episode not found: ${episodeId}`, 404)
+  }
+
+  const storyboardRows = await deps.db
+    .select()
+    .from(storyboards)
+    .where(eq(storyboards.episodeId, episodeId))
+    .orderBy(storyboards.shotNo)
+
+  const specs: BatchTargetSpec[] = []
+  for (const storyboard of storyboardRows) {
+    specs.push({
+      targetId: storyboard.id,
+      existingUrl: storyboard.firstFrameImageUrl,
+      prompt: await composeStoryboardFirstFramePrompt(deps.db, episode.projectId, storyboard),
+      episodeId: storyboard.episodeId,
+      storyboardId: storyboard.id,
+    })
+  }
+
+  return generateBatch(deps, {
+    episodeId,
+    projectId: episode.projectId,
+    targetType: 'storyboard_first_frame',
+    force: request.force ?? false,
+    options: request.options,
+    specs,
+  })
+}
+
+export async function generateAllEpisodeImages(
+  deps: ImageGenerationServiceDeps,
+  episodeId: string,
+  request: BatchImageGenerationRequest,
+) {
+  const episode = await resolveEpisode(deps.db, episodeId)
+
+  if (!episode) {
+    throw new ImageGenerationServiceError(`Episode not found: ${episodeId}`, 404)
+  }
+
+  const charactersResult = await generateEpisodeCharacterImages(deps, episodeId, request)
+  const scenesResult = await generateEpisodeSceneImages(deps, episodeId, request)
+  const storyboardFirstFramesResult = await generateEpisodeStoryboardFirstFrames(deps, episodeId, request)
+
+  return {
+    episodeId,
+    characters: charactersResult,
+    scenes: scenesResult,
+    storyboardFirstFrames: storyboardFirstFramesResult,
+  }
+}
+
+export async function getEpisodeImageGenerationStatus(
+  db: DatabaseClient,
+  episodeId: string,
+): Promise<EpisodeImageGenerationStatus | null> {
+  const episode = await resolveEpisode(db, episodeId)
+
+  if (!episode) {
+    return null
+  }
+
+  const characterRows = await db
+    .select({ id: characters.id, url: characters.referenceImageUrl })
+    .from(episodeCharacterLinks)
+    .innerJoin(characters, eq(episodeCharacterLinks.characterId, characters.id))
+    .where(eq(episodeCharacterLinks.episodeId, episodeId))
+
+  const sceneRows = await db
+    .select({ id: scenes.id, url: scenes.referenceImageUrl })
+    .from(episodeSceneLinks)
+    .innerJoin(scenes, eq(episodeSceneLinks.sceneId, scenes.id))
+    .where(eq(episodeSceneLinks.episodeId, episodeId))
+
+  const storyboardRows = await db
+    .select({ id: storyboards.id, url: storyboards.firstFrameImageUrl })
+    .from(storyboards)
+    .where(eq(storyboards.episodeId, episodeId))
+
+  const failedTaskRows = await db
+    .select({ targetType: generationTasks.targetType, targetId: generationTasks.targetId })
+    .from(generationTasks)
+    .where(
+      and(
+        eq(generationTasks.episodeId, episodeId),
+        eq(generationTasks.taskType, 'image_generation'),
+        eq(generationTasks.status, 'failed'),
+      ),
+    )
+
+  return {
+    episodeId,
+    characters: buildStatusCounts(characterRows, 'character_reference_image', failedTaskRows),
+    scenes: buildStatusCounts(sceneRows, 'scene_reference_image', failedTaskRows),
+    storyboardFirstFrames: buildStatusCounts(storyboardRows, 'storyboard_first_frame', failedTaskRows),
+  }
+}
+
+function buildStatusCounts(
+  rows: Array<{ id: string; url: string | null }>,
+  targetType: ImageTargetType,
+  failedTaskRows: Array<{ targetType: string | null; targetId: string | null }>,
+): ImageAssetStatusCounts {
+  const total = rows.length
+  const completed = rows.filter((row) => Boolean(row.url)).length
+  const missing = total - completed
+
+  const idsWithoutImage = new Set(rows.filter((row) => !row.url).map((row) => row.id))
+  const failedTargetIds = new Set(
+    failedTaskRows
+      .filter((task) => task.targetType === targetType && task.targetId && idsWithoutImage.has(task.targetId))
+      .map((task) => task.targetId as string),
+  )
+
+  return { total, completed, missing, failed: failedTargetIds.size }
 }
 
 export async function executeImageGeneration(
@@ -404,15 +832,132 @@ async function resolveImageTarget(
     throw new ImageGenerationServiceError(`Storyboard not found: ${request.target_id}`, 404)
   }
 
+  const prompt =
+    request.prompt_override ?? (await composeStoryboardFirstFramePrompt(db, projectId, storyboard))
+
   return {
     projectId,
     targetType: request.target_type,
     targetId: storyboard.id,
-    prompt: request.prompt_override ?? storyboard.imagePrompt,
+    prompt,
     existingUrl: storyboard.firstFrameImageUrl,
     episodeId: storyboard.episodeId,
     storyboardId: storyboard.id,
   }
+}
+
+async function composeStoryboardFirstFramePrompt(
+  db: DatabaseClient,
+  projectId: string,
+  storyboard: typeof storyboards.$inferSelect,
+) {
+  const parts: Array<string | null | undefined> = [
+    storyboard.imagePrompt,
+    storyboard.action ? `Action: ${storyboard.action}` : null,
+    storyboard.emotion ? `Emotion: ${storyboard.emotion}` : null,
+  ]
+
+  const dialogueText = extractDialogueText(storyboard.dialogueJson)
+  if (dialogueText) {
+    parts.push(`Dialogue: ${dialogueText}`)
+  }
+
+  if (storyboard.sceneId) {
+    const [scene] = await db
+      .select()
+      .from(scenes)
+      .where(and(eq(scenes.id, storyboard.sceneId), eq(scenes.projectId, projectId)))
+      .limit(1)
+
+    if (scene) {
+      parts.push(
+        scene.name ? `Scene: ${scene.name}` : null,
+        scene.description,
+        scene.visualPrompt,
+        scene.referenceImageUrl ? `Scene reference image: ${scene.referenceImageUrl}` : null,
+      )
+    }
+  }
+
+  const characterIds = parseIdArray(storyboard.characterIdsJson)
+  if (characterIds.length > 0) {
+    const characterRows = await db
+      .select()
+      .from(characters)
+      .where(and(eq(characters.projectId, projectId), inArray(characters.id, characterIds)))
+
+    for (const character of characterRows) {
+      parts.push(
+        `Character: ${character.name}`,
+        character.appearance,
+        character.referenceImageUrl ? `Character reference image: ${character.referenceImageUrl}` : null,
+      )
+    }
+  }
+
+  const propIds = parseIdArray(storyboard.propIdsJson)
+  if (propIds.length > 0) {
+    const propRows = await db
+      .select()
+      .from(props)
+      .where(and(eq(props.projectId, projectId), inArray(props.id, propIds)))
+
+    for (const prop of propRows) {
+      parts.push(`Prop: ${prop.name}`, prop.description)
+    }
+  }
+
+  return compactPrompt(parts)
+}
+
+function parseIdArray(value: string) {
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.map(String) : []
+  } catch {
+    return []
+  }
+}
+
+function extractDialogueText(value: string) {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return ''
+  }
+
+  if (!Array.isArray(parsed)) {
+    return ''
+  }
+
+  return parsed
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return entry
+      }
+
+      if (entry && typeof entry === 'object') {
+        const record = entry as Record<string, unknown>
+        const speaker = typeof record.speaker === 'string' ? record.speaker : null
+        const line =
+          typeof record.line === 'string'
+            ? record.line
+            : typeof record.text === 'string'
+              ? record.text
+              : null
+
+        if (speaker && line) {
+          return `${speaker}: ${line}`
+        }
+
+        return line ?? ''
+      }
+
+      return ''
+    })
+    .filter((text): text is string => Boolean(text.trim()))
+    .join(' / ')
 }
 
 function compactPrompt(parts: Array<string | null | undefined>) {
