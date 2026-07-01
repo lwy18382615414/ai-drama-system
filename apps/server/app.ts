@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { createDatabase, initializeDatabase } from '../../packages/database/index.js'
 import { MockImageProvider, MockStructuredTextProvider } from '../../packages/providers/index.js'
 import { createAssetRoutes } from './routes/assets.js'
 import { createEventAgentRoutes } from './routes/event-agent.js'
 import { createEpisodePlannerRoutes } from './routes/episode-planner.js'
+import { createProjectRoutes } from './routes/project.js'
 import { createScriptRoutes } from './routes/script.js'
 import { createStoryboardRoutes } from './routes/storyboard.js'
 import { createImageGenerationRoutes } from './routes/image-generation.js'
@@ -16,7 +18,14 @@ export async function createApp() {
   const imageProvider = new MockImageProvider()
   const app = new Hono()
 
+  // Permissive CORS for the workbench frontend dev server (separate origin in MVP).
+  app.use(
+    '/api/*',
+    cors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3100', credentials: false }),
+  )
+
   app.get('/health', (c) => c.json({ ok: true }))
+  app.route('/', createProjectRoutes({ db }))
   app.route('/api/agents/event', createEventAgentRoutes({ db, provider }))
   app.route('/', createEpisodePlannerRoutes({ db, provider }))
   app.route('/', createScriptRoutes({ db, provider }))

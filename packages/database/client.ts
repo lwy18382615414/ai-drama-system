@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { drizzle } from 'drizzle-orm/sql-js'
 import { sql } from 'drizzle-orm'
@@ -26,6 +26,14 @@ export async function createDatabase(filename = 'data/ai-drama.sqlite') {
   sqlite.run('PRAGMA foreign_keys = ON')
 
   return drizzle(sqlite, { schema })
+}
+
+export function persistDatabase(db: DatabaseClient, filename = 'data/ai-drama.sqlite') {
+  if (filename === ':memory:') return
+
+  mkdirSync(dirname(filename), { recursive: true })
+  const sqlite = (db as unknown as { session: { client: SqlJsDatabase } }).session.client
+  writeFileSync(filename, Buffer.from(sqlite.export()))
 }
 
 export function initializeDatabase(db: DatabaseClient) {
