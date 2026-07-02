@@ -14,7 +14,11 @@ Phase 1 is complete. The completed backend narrative pipeline is:
 
 novel_chapters → novel_events → episodes + episode_event_links → scripts → characters/scenes/props → storyboards.
 
-Phase 2B is active only for character reference image generation using `MockImageProvider`. Do not implement real image providers, scene images, storyboard first-frame generation, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2B.
+Phase 2A–2C are complete: character reference images, scene reference images, storyboard first frames, and episode-level batch image generation, all using `MockImageProvider` only.
+
+Text generation uses `OpenAICompatibleTextProvider` when `TEXT_PROVIDER_API_KEY` / `TEXT_PROVIDER_BASE_URL` are set, falling back to `MockStructuredTextProvider` otherwise.
+
+Do not implement real image providers, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2C.
 
 See `docs/phase-roadmap.md` for the current phase roadmap.
 

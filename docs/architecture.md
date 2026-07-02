@@ -20,10 +20,15 @@ Current Phase 1 output:
 - props
 - storyboards
 
-Future media output, currently paused in Phase 2:
+Active mock media output, Phase 2A–2C:
 
-- image prompts and refined visual prompts
-- generated images
+- character reference images
+- scene reference images
+- storyboard first-frame images
+
+Future media output, currently paused in later Phase 2:
+
+- real image provider integration and refined visual prompts
 - video prompts and generated videos
 - TTS audio
 - subtitles
@@ -77,33 +82,46 @@ Extracts reusable production assets from scripts and links them back to the epis
 
 Creates shot-level storyboards from the script and extracted assets.
 
-## Active Scope: Phase 2B
+## Completed Scope: Phase 2A–2C Mock Image Generation
 
-Phase 2A provides ImageProvider + image task infrastructure. Phase 2B activates only the character reference image generation loop.
+Phase 2A provides ImageProvider + image task infrastructure. Phase 2B adds the character reference image loop. Phase 2C adds scene reference images, storyboard first frames, and episode-level batch generation.
 
-The active Phase 2B flow is:
+The image generation flow is:
 
-characters
+target (character / scene / storyboard shot)
 ↓
-character reference image request
+image generation request (single target or episode batch)
 ↓
 `generation_tasks` image task
 ↓
 `MockImageProvider`
 ↓
-`assets` record with `asset_type = character_reference_image`
+`assets` record
 ↓
-`characters.reference_image_url` update
+target URL field update
 
-Active generated target:
+Active generated targets and updated URL fields:
 
-- `character_reference_image`
+- `character_reference_image` → `characters.reference_image_url`
+- `scene_reference_image` → `scenes.reference_image_url`
+- `storyboard_first_frame` → `storyboards.first_frame_image_url`
 
-Scene reference images, storyboard first frames, and later media workflows remain paused. No real image model provider is active in Phase 2B.
+Episode-level batch routes generate images for all episode-linked characters, scenes, or storyboard shots, skipping targets that already have an image unless `force=true`. No real image model provider is active; all image generation uses `MockImageProvider`.
+
+## Text Provider Selection
+
+The server composition root selects the structured text provider from environment variables:
+
+- `TEXT_PROVIDER_API_KEY` set → `OpenAICompatibleTextProvider` (requires `TEXT_PROVIDER_BASE_URL`, optional `TEXT_PROVIDER_MODEL`)
+- otherwise → `MockStructuredTextProvider`
+
+## Frontend Workbench
+
+`apps/web` implements the Vue 3 / Vite / Naive UI workbench with pages for project list/overview, novel import, episode planning, script editing, asset management, character images, and storyboards. It talks to the API server through an axios client and polls `generation_tasks` for async task status.
 
 ## Paused Scope: Later Phase 2
 
-Later Phase 2 is paused. Do not implement real image provider integration, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2B.
+Later Phase 2 is paused. Do not implement real image provider integration, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2C.
 
 Paused/future media pipeline:
 
@@ -147,7 +165,7 @@ Phase 1 currently exercises:
 - database persistence
 - agent run logging
 
-Phase 2B currently exercises the image provider adapter, task status persistence, database persistence, asset provenance records, and character reference image URL updates. Object storage, real media provider adapters, FFmpeg composition, and final video export remain later Phase 2+ concerns and are currently paused.
+Phase 2A–2C currently exercise the image provider adapter, task status persistence, database persistence, asset provenance records, and character/scene/storyboard image URL updates through `MockImageProvider`, including episode-level batch generation. The frontend workbench and axios API client are also active. Object storage, real image/video/audio provider adapters, FFmpeg composition, and final video export remain later Phase 2+ concerns and are currently paused.
 
 ## MVP Scope
 

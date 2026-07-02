@@ -13,11 +13,23 @@ Responsibilities:
 - validate output with the caller-provided Zod schema
 - expose provider `name` and `model` for task and agent-run logging
 
-`MockStructuredTextProvider` is the local MVP implementation used by the server composition root.
+Two implementations exist:
 
-## Image Provider: Phase 2A/2B
+- `MockStructuredTextProvider` — the local fallback, returns deterministic structured output without calling a model.
+- `OpenAICompatibleTextProvider` (`packages/providers/openai-compatible-text-provider.ts`) — calls any OpenAI-compatible chat completion endpoint and returns validated structured JSON.
 
-Phase 2A adds `ImageProvider` in `packages/providers/image-provider.ts`. Phase 2B reuses it for character reference image generation only.
+The server composition root (`apps/server/app.ts`) selects the provider from environment variables:
+
+- `TEXT_PROVIDER_API_KEY` set → `OpenAICompatibleTextProvider`
+  - `TEXT_PROVIDER_BASE_URL` — required when the API key is set
+  - `TEXT_PROVIDER_MODEL` — optional model override
+- otherwise → `MockStructuredTextProvider`
+
+Do not hardcode API keys; configure them through environment variables only. A smoke test is available via `npm run smoke:text-provider`.
+
+## Image Provider: Phase 2A–2C
+
+Phase 2A adds `ImageProvider` in `packages/providers/image-provider.ts`. Phase 2B–2C reuse it for character reference images, scene reference images, and storyboard first frames, including episode-level batch generation.
 
 Responsibilities:
 
@@ -41,8 +53,8 @@ Interface shape:
   - optional `raw`
 - `ImageProvider.generateImage(request)`
 
-`MockImageProvider` is the only active Phase 2A/2B provider. It does not call a real image model and returns a deterministic local placeholder URL under `/static/mock-images/...`. Phase 2B character reference image tasks call this provider through `ImageGenerationService`.
+`MockImageProvider` is the only active image provider. It does not call a real image model and returns a deterministic local placeholder URL under `/static/mock-images/...`. All Phase 2B–2C image tasks (single-target and episode batch) call this provider through `ImageGenerationService`.
 
 ## Boundary
 
-Do not add OpenAI, Gemini, 即梦, 可灵, or other real image providers until Phase 2 is explicitly expanded beyond Phase 2B.
+Do not add OpenAI, Gemini, 即梦, 可灵, or other real image providers until Phase 2 is explicitly expanded beyond Phase 2C.

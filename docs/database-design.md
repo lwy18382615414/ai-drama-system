@@ -4,7 +4,7 @@
 
 Phase 1 is complete. The database supports the completed backend narrative pipeline through storyboard generation.
 
-Phase 2A provides image-provider task infrastructure. Phase 2B activates only the character reference image loop on top of that infrastructure. The database records mock image generation tasks, generated character reference image assets, and active image URLs for characters. Later Phase 2 media workflows remain paused.
+Phase 2A provides image-provider task infrastructure. Phase 2B–2C activate mock character reference images, scene reference images, storyboard first frames, and episode-level batch generation on top of that infrastructure. The database records mock image generation tasks, generated image assets, and active image URLs for characters (`reference_image_url`), scenes (`reference_image_url`), and storyboards (`first_frame_image_url`). Later Phase 2 media workflows remain paused.
 
 ## Phase 1 Data Flow
 
@@ -28,7 +28,7 @@ Operational logging and task tracking:
 
 - `generation_tasks` tracks long-running generation task status.
 - `agent_runs` logs Agent inputs, outputs, status, and errors.
-- `assets` records generated media asset provenance and active character image URLs for Phase 2B.
+- `assets` records generated media asset provenance and active image URLs for characters, scenes, and storyboard first frames in Phase 2B–2C.
 
 ## Core Phase 1 Tables
 
@@ -236,9 +236,10 @@ Important constraint:
 
 - unique `(project_id, name)`
 
-Phase 2 note:
+Phase 2C note:
 
-- `visual_prompt` and `reference_image_url` are planning/reference fields; they should not trigger image-generation provider calls while Phase 2 is paused.
+- `visual_prompt` is a planning/reference field used as an input to the scene reference image prompt.
+- `reference_image_url` is active for the scene reference image generation loop and is updated after the mock image task completes.
 
 ### props
 
@@ -359,8 +360,9 @@ Important constraint:
 
 Phase 2 note:
 
-- `image_prompt` and `video_prompt` are Phase 1 storyboard planning fields.
-- `first_frame_image_url`, `last_frame_image_url`, `video_url`, `tts_audio_url`, `subtitle_url`, and `composed_video_url` are reserved for paused Phase 2 media workflows.
+- `image_prompt` and `video_prompt` are Phase 1 storyboard planning fields. `image_prompt` is used as an input to the Phase 2C storyboard first-frame image prompt.
+- `first_frame_image_url` is active for the Phase 2C storyboard first-frame generation loop and is updated after the mock image task completes.
+- `last_frame_image_url`, `video_url`, `tts_audio_url`, `subtitle_url`, and `composed_video_url` are reserved for paused later Phase 2 media workflows.
 
 ### generation_tasks
 
@@ -408,7 +410,7 @@ Fields:
 - created_at
 - updated_at
 
-Phase 2A supported target types:
+Phase 2A–2C supported `asset_type` / `target_type` values:
 
 - `character_reference_image`
 - `scene_reference_image`
