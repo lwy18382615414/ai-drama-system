@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { z } from 'zod/v4'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { ImageProvider } from '../../../packages/providers/index.js'
+import { fail, internalError, invalidQuery, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   BatchImageGenerationRequestSchema,
   generateAllEpisodeImages,
@@ -37,7 +38,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const forceQuery = parseForceQuery(c.req.query('force'))
 
     if (forceQuery === 'invalid') {
-      return c.json({ error: 'Invalid force query parameter' }, 400)
+      return invalidQuery(c)
     }
 
     const requestBody = {
@@ -47,12 +48,12 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const parsed = StartCharacterReferenceImageRequestSchema.safeParse(requestBody)
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const result = await startCharacterReferenceImageGeneration(deps, c.req.param('characterId'), parsed.data)
-      return c.json(result, 202)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -63,7 +64,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const forceQuery = parseForceQuery(c.req.query('force'))
 
     if (forceQuery === 'invalid') {
-      return c.json({ error: 'Invalid force query parameter' }, 400)
+      return invalidQuery(c)
     }
 
     const requestBody = {
@@ -73,12 +74,12 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const parsed = StartSceneReferenceImageRequestSchema.safeParse(requestBody)
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const result = await startSceneReferenceImageGeneration(deps, c.req.param('sceneId'), parsed.data)
-      return c.json(result, 202)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -89,7 +90,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const forceQuery = parseForceQuery(c.req.query('force'))
 
     if (forceQuery === 'invalid') {
-      return c.json({ error: 'Invalid force query parameter' }, 400)
+      return invalidQuery(c)
     }
 
     const requestBody = {
@@ -99,12 +100,12 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const parsed = StartStoryboardFirstFrameRequestSchema.safeParse(requestBody)
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const result = await startStoryboardFirstFrameGeneration(deps, c.req.param('storyboardId'), parsed.data)
-      return c.json(result, 202)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -115,7 +116,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const forceQuery = parseForceQuery(c.req.query('force'))
 
     if (forceQuery === 'invalid') {
-      return c.json({ error: 'Invalid force query parameter' }, 400)
+      return invalidQuery(c)
     }
 
     const requestBody = {
@@ -125,12 +126,12 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     const parsed = StartImageGenerationRequestSchema.safeParse(requestBody)
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const result = await startImageGeneration(deps, c.req.param('projectId'), parsed.data)
-      return c.json(result, 202)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -142,7 +143,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
 
     try {
       const result = await generateEpisodeCharacterImages(deps, c.req.param('episodeId'), parsed.data)
-      return c.json(result, 200)
+      return ok(c, result, 200)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -154,7 +155,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
 
     try {
       const result = await generateEpisodeSceneImages(deps, c.req.param('episodeId'), parsed.data)
-      return c.json(result, 200)
+      return ok(c, result, 200)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -166,7 +167,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
 
     try {
       const result = await generateEpisodeStoryboardFirstFrames(deps, c.req.param('episodeId'), parsed.data)
-      return c.json(result, 200)
+      return ok(c, result, 200)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -178,7 +179,7 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
 
     try {
       const result = await generateAllEpisodeImages(deps, c.req.param('episodeId'), parsed.data)
-      return c.json(result, 200)
+      return ok(c, result, 200)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -189,10 +190,10 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
       const result = await getEpisodeImageGenerationStatus(deps.db, c.req.param('episodeId'))
 
       if (!result) {
-        return c.json({ error: 'Episode not found' }, 404)
+        return notFound(c, 'Episode not found')
       }
 
-      return c.json(result)
+      return ok(c, result)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -203,10 +204,10 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
       const task = await getGenerationTask(deps.db, c.req.param('taskId'))
 
       if (!task) {
-        return c.json({ error: 'Generation task not found' }, 404)
+        return notFound(c, 'Generation task not found')
       }
 
-      return c.json({ task })
+      return ok(c, { task })
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -217,10 +218,10 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
       const result = await getProjectAssets(deps.db, c.req.param('projectId'))
 
       if (!result) {
-        return c.json({ error: 'Project not found' }, 404)
+        return notFound(c, 'Project not found')
       }
 
-      return c.json(result)
+      return ok(c, result)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -236,7 +237,7 @@ async function parseBatchRequest(
   const forceQuery = parseForceQuery(c.req.query('force'))
 
   if (forceQuery === 'invalid') {
-    return { response: c.json({ error: 'Invalid force query parameter' }, 400) }
+    return { response: invalidQuery(c) }
   }
 
   const requestBody = {
@@ -246,7 +247,7 @@ async function parseBatchRequest(
   const parsed = BatchImageGenerationRequestSchema.safeParse(requestBody)
 
   if (!parsed.success) {
-    return { response: c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400) }
+    return { response: invalidRequestBody(c, parsed.error.issues) }
   }
 
   return { data: parsed.data }
@@ -270,16 +271,12 @@ function parseForceQuery(value: string | undefined) {
 
 function handleServiceError(c: Context, error: unknown) {
   if (error instanceof ImageGenerationServiceError) {
-    return c.json({ error: error.message }, error.statusCode as 400 | 404 | 409)
+    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 404 | 409)
   }
 
   if (error instanceof z.ZodError) {
-    return c.json({ error: 'Invalid request body', issues: error.issues }, 400)
+    return invalidRequestBody(c, error.issues)
   }
 
-  if (error instanceof Error) {
-    return c.json({ error: error.message }, 500)
-  }
-
-  return c.json({ error: String(error) }, 500)
+  return internalError(c, error)
 }

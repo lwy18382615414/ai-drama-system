@@ -13,6 +13,12 @@ import { MockImageProvider, MockStructuredTextProvider } from '../../../packages
 import { createAssetRoutes } from './assets.js'
 import { createImageGenerationRoutes } from './image-generation.js'
 
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
+}
+
 async function createTestApp(imageUrl = '/static/mock-images/scene-route.png') {
   const db = await createDatabase(':memory:')
   initializeDatabase(db)
@@ -73,7 +79,9 @@ describe('scene image generation routes', () => {
 
     const startRes = await app.request('/api/scenes/scene-1/generate-image', { method: 'POST' })
     expect(startRes.status).toBe(202)
-    const startBody = (await startRes.json()) as { taskId: string; status: string }
+    const startEnvelope = (await startRes.json()) as ApiResponse<{ taskId: string; status: string }>
+    expect(startEnvelope.code).toBe(0)
+    const startBody = startEnvelope.data
     expect(startBody.status).toBe('pending')
     expect(startBody.taskId).toBeTruthy()
 
@@ -82,7 +90,9 @@ describe('scene image generation routes', () => {
 
     const sceneRes = await app.request('/api/scenes/scene-1')
     expect(sceneRes.status).toBe(200)
-    const sceneBody = (await sceneRes.json()) as { scene: { reference_image_url: string | null } }
+    const sceneEnvelope = (await sceneRes.json()) as ApiResponse<{ scene: { reference_image_url: string | null } }>
+    expect(sceneEnvelope.code).toBe(0)
+    const sceneBody = sceneEnvelope.data
     expect(sceneBody.scene.reference_image_url).toBe('/static/mock-images/scene-route.png')
   })
 
@@ -91,13 +101,29 @@ describe('scene image generation routes', () => {
 
     const first = await app.request('/api/scenes/scene-1/generate-image', { method: 'POST' })
     expect(first.status).toBe(202)
-    await waitForTask(db, ((await first.json()) as { taskId: string }).taskId)
+    await waitForTask(db, ((await first.json()) as ApiResponse<{ taskId: string }>).data.taskId)
 
     const conflict = await app.request('/api/scenes/scene-1/generate-image', { method: 'POST' })
     expect(conflict.status).toBe(409)
+    const conflictBody = (await conflict.json()) as ApiResponse<null>
+    expect(conflictBody.code).toBe(40901)
 
     const forced = await app.request('/api/scenes/scene-1/generate-image?force=true', { method: 'POST' })
     expect(forced.status).toBe(202)
+    const forcedBody = (await forced.json()) as ApiResponse<{ taskId: string; status: string }>
+    expect(forcedBody.code).toBe(0)
+  })
+
+  it('returns 40002 for invalid force query values', async () => {
+    const { app } = await createTestApp()
+
+    const response = await app.request('/api/scenes/scene-1/generate-image?force=maybe', { method: 'POST' })
+
+    expect(response.status).toBe(400)
+    const body = (await response.json()) as ApiResponse<null>
+    expect(body.code).toBe(40002)
+    expect(body.message).toBe('Invalid force query parameter')
+    expect(body.data).toBeNull()
   })
 
   it('returns 404 for an unknown scene', async () => {
@@ -105,8 +131,12 @@ describe('scene image generation routes', () => {
 
     const res = await app.request('/api/scenes/missing/generate-image', { method: 'POST' })
     expect(res.status).toBe(404)
+    const body = (await res.json()) as ApiResponse<null>
+    expect(body.code).toBe(40401)
 
     const getRes = await app.request('/api/scenes/missing')
     expect(getRes.status).toBe(404)
+    const getBody = (await getRes.json()) as ApiResponse<null>
+    expect(getBody.code).toBe(40401)
   })
 })

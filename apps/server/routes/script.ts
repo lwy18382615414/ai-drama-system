@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { z } from 'zod/v4'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import { fail, internalError, invalidQuery, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   getEpisodeScript,
   PatchScriptRequestSchema,
@@ -25,7 +26,7 @@ export function createScriptRoutes(deps: ScriptRouteDeps) {
     const forceQuery = parseForceQuery(c.req.query('force'))
 
     if (forceQuery === 'invalid') {
-      return c.json({ error: 'Invalid force query parameter' }, 400)
+      return invalidQuery(c)
     }
 
     const requestBody = {
@@ -35,12 +36,12 @@ export function createScriptRoutes(deps: ScriptRouteDeps) {
     const parsed = StartScriptGenerationRequestSchema.safeParse(requestBody)
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const result = await startScriptGeneration(deps, c.req.param('episodeId'), parsed.data)
-      return c.json(result, 202)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -51,14 +52,14 @@ export function createScriptRoutes(deps: ScriptRouteDeps) {
       const result = await getEpisodeScript(deps.db, c.req.param('episodeId'))
 
       if (!result) {
-        return c.json({ error: 'Episode not found' }, 404)
+        return notFound(c, 'Episode not found')
       }
 
       if (!result.script) {
-        return c.json({ error: 'Script not found' }, 404)
+        return notFound(c, 'Script not found')
       }
 
-      return c.json(result)
+      return ok(c, result)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -69,12 +70,12 @@ export function createScriptRoutes(deps: ScriptRouteDeps) {
     const parsed = PatchScriptRequestSchema.safeParse(body ?? {})
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const script = await updateScript(deps.db, c.req.param('scriptId'), parsed.data)
-      return c.json({ script })
+      return ok(c, { script })
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -101,16 +102,12 @@ function parseForceQuery(value: string | undefined) {
 
 function handleServiceError(c: Context, error: unknown) {
   if (error instanceof ScriptServiceError) {
-    return c.json({ error: error.message }, error.statusCode as 400 | 404 | 409)
+    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 404 | 409)
   }
 
   if (error instanceof z.ZodError) {
-    return c.json({ error: 'Invalid request body', issues: error.issues }, 400)
+    return invalidRequestBody(c, error.issues)
   }
 
-  if (error instanceof Error) {
-    return c.json({ error: error.message }, 500)
-  }
-
-  return c.json({ error: String(error) }, 500)
+  return internalError(c, error)
 }

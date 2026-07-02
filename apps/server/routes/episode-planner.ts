@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import { fail, internalError, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   EpisodePlannerServiceError,
   getEpisodeEvents,
@@ -23,12 +24,12 @@ export function createEpisodePlannerRoutes(deps: EpisodePlannerRouteDeps) {
     const parsed = StartEpisodePlanningRequestSchema.safeParse(body ?? {})
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const result = await startEpisodePlanning(deps, c.req.param('projectId'), parsed.data)
-      return c.json(result, 202)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -38,20 +39,20 @@ export function createEpisodePlannerRoutes(deps: EpisodePlannerRouteDeps) {
     const episodes = await getProjectEpisodes(deps.db, c.req.param('projectId'))
 
     if (!episodes) {
-      return c.json({ error: 'Project not found' }, 404)
+      return notFound(c, 'Project not found')
     }
 
-    return c.json({ episodes })
+    return ok(c, { episodes })
   })
 
   app.get('/api/episodes/:episodeId/events', async (c) => {
     const result = await getEpisodeEvents(deps.db, c.req.param('episodeId'))
 
     if (!result) {
-      return c.json({ error: 'Episode not found' }, 404)
+      return notFound(c, 'Episode not found')
     }
 
-    return c.json(result)
+    return ok(c, result)
   })
 
   return app
@@ -59,12 +60,8 @@ export function createEpisodePlannerRoutes(deps: EpisodePlannerRouteDeps) {
 
 function handleServiceError(c: Context, error: unknown) {
   if (error instanceof EpisodePlannerServiceError) {
-    return c.json({ error: error.message }, error.statusCode as 400 | 404 | 409)
+    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 404 | 409)
   }
 
-  if (error instanceof Error) {
-    return c.json({ error: error.message }, 500)
-  }
-
-  return c.json({ error: String(error) }, 500)
+  return internalError(c, error)
 }

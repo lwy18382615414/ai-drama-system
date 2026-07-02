@@ -13,6 +13,12 @@ import {
 } from '../../../packages/database/index.js'
 import { createProjectRoutes } from './project.js'
 
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
+}
+
 async function createTestApp() {
   const db = await createDatabase(':memory:')
   initializeDatabase(db)
@@ -39,7 +45,10 @@ describe('project routes', () => {
     })
 
     expect(createResponse.status).toBe(201)
-    const created = await createResponse.json()
+    const createEnvelope = (await createResponse.json()) as ApiResponse<{ project: { id: string; title: string } }>
+    expect(createEnvelope.code).toBe(0)
+    expect(createEnvelope.message).toBe('ok')
+    const created = createEnvelope.data
     expect(created.project.title).toBe('午夜信号')
 
     const now = new Date().toISOString()
@@ -153,13 +162,17 @@ describe('project routes', () => {
 
     const listResponse = await app.request('/api/projects')
     expect(listResponse.status).toBe(200)
-    const listBody = await listResponse.json()
+    const listEnvelope = (await listResponse.json()) as ApiResponse<{ projects: unknown[] }>
+    expect(listEnvelope.code).toBe(0)
+    const listBody = listEnvelope.data
     expect(listBody.projects).toHaveLength(1)
     expect(listBody.projects[0]).toMatchObject({ episodeCount: 1, storyboardCount: 1, imageCompletion: 50 })
 
     const detailResponse = await app.request(`/api/projects/${created.project.id}`)
     expect(detailResponse.status).toBe(200)
-    const detailBody = await detailResponse.json()
+    const detailEnvelope = (await detailResponse.json()) as ApiResponse<{ project: unknown }>
+    expect(detailEnvelope.code).toBe(0)
+    const detailBody = detailEnvelope.data
     expect(detailBody.project).toMatchObject({
       chapterCount: 1,
       eventCount: 1,
@@ -180,8 +193,10 @@ describe('project routes', () => {
     })
 
     expect(response.status).toBe(400)
-    const body = await response.json()
-    expect(body.error).toBe('Invalid request body')
+    const body = (await response.json()) as ApiResponse<{ issues: unknown[] }>
+    expect(body.code).toBe(40001)
+    expect(body.message).toBe('Invalid request body')
+    expect(body.data.issues).toBeTruthy()
   })
 
   it('returns 404 for missing project details', async () => {
@@ -189,5 +204,9 @@ describe('project routes', () => {
 
     const response = await app.request('/api/projects/missing-project')
     expect(response.status).toBe(404)
+    const body = (await response.json()) as ApiResponse<null>
+    expect(body.code).toBe(40401)
+    expect(body.message).toBe('Project not found')
+    expect(body.data).toBeNull()
   })
 })

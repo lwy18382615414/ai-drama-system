@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import { invalidRequestBody, notFound, ok } from '../api-response.js'
 import {
   getChapterEvents,
   getEventExtractionStatus,
@@ -21,28 +22,28 @@ export function createEventAgentRoutes(deps: EventAgentRouteDeps) {
     const parsed = StartEventExtractionRequestSchema.safeParse(body)
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     const result = await startEventExtraction(deps, parsed.data)
 
-    return c.json(result, 202)
+    return ok(c, result, 202)
   })
 
   app.get('/status/:taskId', async (c) => {
     const task = await getEventExtractionStatus(deps.db, c.req.param('taskId'))
 
     if (!task) {
-      return c.json({ error: 'Task not found' }, 404)
+      return notFound(c, 'Task not found')
     }
 
-    return c.json({ task })
+    return ok(c, { task })
   })
 
   app.get('/result/:chapterId', async (c) => {
     const events = await getChapterEvents(deps.db, c.req.param('chapterId'))
 
-    return c.json({ events })
+    return ok(c, { events })
   })
 
   return app

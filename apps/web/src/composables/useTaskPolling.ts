@@ -1,4 +1,4 @@
-import { onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, shallowRef, type Ref, type ShallowRef } from 'vue'
 
 export interface TaskPollingOptions<T> {
   fetchStatus: (taskId: string) => Promise<T>
@@ -10,10 +10,18 @@ export interface TaskPollingOptions<T> {
   onFailed?: (result: T) => void
 }
 
+export interface TaskPollingControls<T> {
+  start: (taskId: string) => void
+  stop: () => void
+  isPolling: Ref<boolean>
+  lastResult: ShallowRef<T | null>
+  error: Ref<string | null>
+}
+
 /** Polls a generation-task-shaped endpoint until it succeeds or fails, cleaning up on unmount. */
-export function useTaskPolling<T>(opts: TaskPollingOptions<T>) {
+export function useTaskPolling<T>(opts: TaskPollingOptions<T>): TaskPollingControls<T> {
   const isPolling = ref(false)
-  const lastResult = ref<T | null>(null)
+  const lastResult = shallowRef<T | null>(null)
   const error = ref<string | null>(null)
   let timer: ReturnType<typeof setInterval> | null = null
 

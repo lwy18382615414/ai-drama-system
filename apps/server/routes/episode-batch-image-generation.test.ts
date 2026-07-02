@@ -26,6 +26,12 @@ interface BatchResultBody {
   results: Array<{ targetId: string; status: string; taskId?: string; imageUrl?: string }>
 }
 
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
+}
+
 async function createTestApp(
   responseFactory?: (request: ImageGenerationRequest) => string,
 ) {
@@ -196,7 +202,9 @@ describe('episode batch image generation routes', () => {
 
     const res = await app.request('/api/episodes/episode-1/generate-character-images', { method: 'POST' })
     expect(res.status).toBe(200)
-    const body = (await res.json()) as BatchResultBody
+    const envelope = (await res.json()) as ApiResponse<BatchResultBody>
+    expect(envelope.code).toBe(0)
+    const body = envelope.data
     expect(body.targetType).toBe('character_reference_image')
     expect(body.summary).toEqual({ total: 2, completed: 2, skipped: 0, failed: 0 })
 
@@ -219,7 +227,7 @@ describe('episode batch image generation routes', () => {
       .where(eq(characters.id, 'character-1'))
 
     const res = await app.request('/api/episodes/episode-1/generate-character-images', { method: 'POST' })
-    const body = (await res.json()) as BatchResultBody
+    const body = ((await res.json()) as ApiResponse<BatchResultBody>).data
     expect(body.summary).toEqual({ total: 2, completed: 1, skipped: 1, failed: 0 })
 
     const skipped = body.results.find((r) => r.targetId === 'character-1')
@@ -251,7 +259,7 @@ describe('episode batch image generation routes', () => {
 
     // Second pass with force regenerates.
     const res = await app.request('/api/episodes/episode-1/generate-scene-images?force=true', { method: 'POST' })
-    const body = (await res.json()) as BatchResultBody
+    const body = ((await res.json()) as ApiResponse<BatchResultBody>).data
     expect(body.summary).toEqual({ total: 1, completed: 1, skipped: 0, failed: 0 })
 
     // Old asset still exists, now superseded.
@@ -286,11 +294,11 @@ describe('episode batch image generation routes', () => {
 
     const res = await app.request('/api/episodes/episode-1/generate-all-images', { method: 'POST' })
     expect(res.status).toBe(200)
-    const body = (await res.json()) as {
+    const body = ((await res.json()) as ApiResponse<{
       characters: BatchResultBody
       scenes: BatchResultBody
       storyboardFirstFrames: BatchResultBody
-    }
+    }>).data
     expect(body.characters.summary.completed).toBe(2)
     expect(body.scenes.summary.completed).toBe(1)
     expect(body.storyboardFirstFrames.summary.completed).toBe(1)
@@ -312,11 +320,13 @@ describe('episode batch image generation routes', () => {
 
     const res = await app.request('/api/episodes/episode-1/image-generation-status')
     expect(res.status).toBe(200)
-    const body = (await res.json()) as {
+    const envelope = (await res.json()) as ApiResponse<{
       characters: { total: number; completed: number; missing: number; failed: number }
       scenes: { total: number; completed: number; missing: number; failed: number }
       storyboardFirstFrames: { total: number; completed: number; missing: number; failed: number }
-    }
+    }>
+    expect(envelope.code).toBe(0)
+    const body = envelope.data
 
     expect(body.characters).toEqual({ total: 2, completed: 1, missing: 1, failed: 1 })
     expect(body.scenes).toEqual({ total: 1, completed: 0, missing: 1, failed: 0 })
@@ -335,8 +345,12 @@ describe('episode batch image generation routes', () => {
 
     const genRes = await app.request('/api/episodes/missing/generate-character-images', { method: 'POST' })
     expect(genRes.status).toBe(404)
+    const genBody = (await genRes.json()) as ApiResponse<null>
+    expect(genBody.code).toBe(40401)
 
     const statusRes = await app.request('/api/episodes/missing/image-generation-status')
     expect(statusRes.status).toBe(404)
+    const statusBody = (await statusRes.json()) as ApiResponse<null>
+    expect(statusBody.code).toBe(40401)
   })
 })

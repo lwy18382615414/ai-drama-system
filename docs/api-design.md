@@ -22,11 +22,46 @@ The Hono app mounts the route groups in `apps/server/app.ts`:
 - Storyboard routes at the root app path with full `/api/...` route definitions
 - Image generation routes at the root app path with full `/api/...` route definitions
 
+## Response Envelope
+
+All JSON routes return a unified response envelope:
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {}
+}
+```
+
+Success responses use `code = 0` and keep the previous route-specific payload inside `data`, such as `{ "project": ... }`, `{ "taskId": "...", "status": "pending" }`, or batch image summaries. HTTP status codes are still meaningful and remain unchanged (`200`, `201`, `202`, and so on).
+
+Error responses use the same envelope with `data = null` unless extra details are needed:
+
+```json
+{
+  "code": 40001,
+  "message": "Invalid request body",
+  "data": {
+    "issues": []
+  }
+}
+```
+
+Current API codes:
+
+- `0` success
+- `40001` invalid request body or bad request
+- `40002` invalid query parameter
+- `40401` resource not found
+- `40901` resource conflict
+- `50001` internal server error
+
 ## Health
 
 ### `GET /health`
 
-Returns basic service health.
+Returns basic service health inside the unified response envelope.
 
 ## Project Routes
 

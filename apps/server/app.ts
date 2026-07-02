@@ -8,6 +8,7 @@ import {
   type ImageProvider,
   type StructuredTextProvider,
 } from '../../packages/providers/index.js'
+import { internalError, ok } from './api-response.js'
 
 const STATIC_DIR = process.env.STATIC_DIR ?? 'data/static'
 const STATIC_URL_BASE = '/static'
@@ -39,7 +40,9 @@ export async function createApp() {
     serveStatic({ root: STATIC_DIR, rewriteRequestPath: (p) => p.replace(/^\/static/, '') }),
   )
 
-  app.get('/health', (c) => c.json({ ok: true }))
+  app.onError((error, c) => internalError(c, error))
+
+  app.get('/health', (c) => ok(c, { ok: true }))
   app.route('/', createProjectRoutes({ db }))
   app.route('/api/agents/event', createEventAgentRoutes({ db, provider }))
   app.route('/', createEpisodePlannerRoutes({ db, provider }))

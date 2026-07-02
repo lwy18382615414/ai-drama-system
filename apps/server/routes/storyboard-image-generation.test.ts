@@ -18,6 +18,12 @@ import { MockImageProvider, MockStructuredTextProvider } from '../../../packages
 import { createImageGenerationRoutes } from './image-generation.js'
 import { createStoryboardRoutes } from './storyboard.js'
 
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
+}
+
 async function createTestApp(imageUrl = '/static/mock-images/storyboard-route.png') {
   const db = await createDatabase(':memory:')
   initializeDatabase(db)
@@ -151,7 +157,9 @@ describe('storyboard first-frame image generation routes', () => {
 
     const startRes = await app.request('/api/storyboards/storyboard-1/generate-first-frame', { method: 'POST' })
     expect(startRes.status).toBe(202)
-    const startBody = (await startRes.json()) as { taskId: string; status: string }
+    const startEnvelope = (await startRes.json()) as ApiResponse<{ taskId: string; status: string }>
+    expect(startEnvelope.code).toBe(0)
+    const startBody = startEnvelope.data
     expect(startBody.status).toBe('pending')
     expect(startBody.taskId).toBeTruthy()
 
@@ -161,7 +169,9 @@ describe('storyboard first-frame image generation routes', () => {
 
     const sbRes = await app.request('/api/storyboards/storyboard-1')
     expect(sbRes.status).toBe(200)
-    const sbBody = (await sbRes.json()) as { storyboard: { firstFrameImageUrl: string | null } }
+    const sbEnvelope = (await sbRes.json()) as ApiResponse<{ storyboard: { firstFrameImageUrl: string | null } }>
+    expect(sbEnvelope.code).toBe(0)
+    const sbBody = sbEnvelope.data
     expect(sbBody.storyboard.firstFrameImageUrl).toBe('/static/mock-images/storyboard-route.png')
 
     const [asset] = await db
@@ -179,16 +189,18 @@ describe('storyboard first-frame image generation routes', () => {
 
     const first = await app.request('/api/storyboards/storyboard-1/generate-first-frame', { method: 'POST' })
     expect(first.status).toBe(202)
-    await waitForTask(db, ((await first.json()) as { taskId: string }).taskId)
+    await waitForTask(db, ((await first.json()) as ApiResponse<{ taskId: string }>).data.taskId)
 
     const conflict = await app.request('/api/storyboards/storyboard-1/generate-first-frame', { method: 'POST' })
     expect(conflict.status).toBe(409)
+    const conflictBody = (await conflict.json()) as ApiResponse<null>
+    expect(conflictBody.code).toBe(40901)
 
     const forced = await app.request('/api/storyboards/storyboard-1/generate-first-frame?force=true', {
       method: 'POST',
     })
     expect(forced.status).toBe(202)
-    await waitForTask(db, ((await forced.json()) as { taskId: string }).taskId)
+    await waitForTask(db, ((await forced.json()) as ApiResponse<{ taskId: string }>).data.taskId)
 
     const activeAssets = await db
       .select()
@@ -208,8 +220,12 @@ describe('storyboard first-frame image generation routes', () => {
 
     const res = await app.request('/api/storyboards/missing/generate-first-frame', { method: 'POST' })
     expect(res.status).toBe(404)
+    const body = (await res.json()) as ApiResponse<null>
+    expect(body.code).toBe(40401)
 
     const getRes = await app.request('/api/storyboards/missing')
     expect(getRes.status).toBe(404)
+    const getBody = (await getRes.json()) as ApiResponse<null>
+    expect(getBody.code).toBe(40401)
   })
 })

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
+import { fail, internalError, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   createProject,
   CreateProjectRequestSchema,
@@ -19,27 +20,27 @@ export function createProjectRoutes(deps: ProjectRouteDeps) {
 
   app.get('/api/projects', async (c) => {
     const projects = await listProjects(deps.db)
-    return c.json({ projects })
+    return ok(c, { projects })
   })
 
   app.get('/api/projects/:projectId', async (c) => {
     const project = await getProjectDetail(deps.db, c.req.param('projectId'))
 
     if (!project) {
-      return c.json({ error: 'Project not found' }, 404)
+      return notFound(c, 'Project not found')
     }
 
-    return c.json({ project })
+    return ok(c, { project })
   })
 
   app.get('/api/projects/:projectId/chapters', async (c) => {
     const result = await getProjectChapters(deps.db, c.req.param('projectId'))
 
     if (!result) {
-      return c.json({ error: 'Project not found' }, 404)
+      return notFound(c, 'Project not found')
     }
 
-    return c.json({ chapters: result.chapters })
+    return ok(c, { chapters: result.chapters })
   })
 
   app.post('/api/projects', async (c) => {
@@ -47,12 +48,12 @@ export function createProjectRoutes(deps: ProjectRouteDeps) {
     const parsed = CreateProjectRequestSchema.safeParse(body ?? {})
 
     if (!parsed.success) {
-      return c.json({ error: 'Invalid request body', issues: parsed.error.issues }, 400)
+      return invalidRequestBody(c, parsed.error.issues)
     }
 
     try {
       const project = await createProject(deps.db, parsed.data)
-      return c.json({ project }, 201)
+      return ok(c, { project }, 201)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -63,12 +64,8 @@ export function createProjectRoutes(deps: ProjectRouteDeps) {
 
 function handleServiceError(c: Context, error: unknown) {
   if (error instanceof ProjectServiceError) {
-    return c.json({ error: error.message }, error.statusCode as 400 | 404 | 409)
+    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 404 | 409)
   }
 
-  if (error instanceof Error) {
-    return c.json({ error: error.message }, 500)
-  }
-
-  return c.json({ error: String(error) }, 500)
+  return internalError(c, error)
 }
