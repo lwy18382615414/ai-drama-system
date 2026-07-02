@@ -6,11 +6,12 @@ export const ApiCode = {
   InvalidQuery: 40002,
   NotFound: 40401,
   Conflict: 40901,
+  PayloadTooLarge: 41301,
   InternalError: 50001,
 } as const
 
 type SuccessStatus = 200 | 201 | 202
-type ErrorStatus = 400 | 404 | 409 | 500
+type ErrorStatus = 400 | 404 | 409 | 413 | 500
 type ApiErrorCode = (typeof ApiCode)[keyof Omit<typeof ApiCode, 'Ok'>]
 
 export function ok<T>(c: Context, data: T, status: SuccessStatus = 200, message = 'ok') {
@@ -42,6 +43,7 @@ export function notFound(c: Context, message: string) {
 export function serviceErrorCode(statusCode: number) {
   if (statusCode === 404) return ApiCode.NotFound
   if (statusCode === 409) return ApiCode.Conflict
+  if (statusCode === 413) return ApiCode.PayloadTooLarge
   return ApiCode.InvalidRequestBody
 }
 

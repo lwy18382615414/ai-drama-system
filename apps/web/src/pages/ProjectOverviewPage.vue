@@ -3,6 +3,7 @@ import { h, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { DataTableColumns } from 'naive-ui'
 import { listEpisodes, type Episode } from '@/api/episodes'
+import type { ProjectDetail } from '@/api/projects'
 import { getApiErrorMessage } from '@/api/client'
 import { toPipelineStatus } from '@/utils/status'
 import { useProject } from '@/composables/useProject'
@@ -11,10 +12,12 @@ import StatCard from '@/components/StatCard.vue'
 import PanelCard from '@/components/PanelCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import EditProjectModal from '@/components/EditProjectModal.vue'
 
 const message = useMessage()
 const { projectId, project } = useProject()
 const projectEpisodes = ref<Episode[]>([])
+const showEditModal = ref(false)
 
 async function loadEpisodes() {
   if (!projectId.value) return
@@ -27,6 +30,10 @@ async function loadEpisodes() {
 
 onMounted(loadEpisodes)
 watch(projectId, loadEpisodes)
+
+function onProjectSaved(updated: ProjectDetail) {
+  project.value = updated
+}
 
 const episodeColumns: DataTableColumns<Episode> = [
   { title: '集数', key: 'episodeNo', render: (ep) => h('strong', `第 ${ep.episodeNo} 集`) },
@@ -53,7 +60,10 @@ const episodeColumns: DataTableColumns<Episode> = [
         <h1 class="sf-page-title">{{ project.title }}</h1>
         <p class="sf-page-desc">{{ project.description }}</p>
       </div>
-      <StatusBadge :status="toPipelineStatus(project.status)" />
+      <div class="sf-row" style="align-items: center">
+        <n-button size="small" secondary @click="showEditModal = true">编辑信息</n-button>
+        <StatusBadge :status="toPipelineStatus(project.status)" />
+      </div>
     </div>
 
     <!-- No active-key: on the overview page the strip is a workflow map, not a location tab. -->
@@ -77,6 +87,8 @@ const episodeColumns: DataTableColumns<Episode> = [
       <EmptyState v-if="!projectEpisodes.length" icon="🎬" title="尚未规划剧集" desc="导入小说并提取事件后即可规划剧集。" />
       <n-data-table v-else :columns="episodeColumns" :data="projectEpisodes" :bordered="false" :single-line="false" />
     </PanelCard>
+
+    <EditProjectModal v-model:show="showEditModal" :project="project" @saved="onProjectSaved" />
   </div>
 
   <EmptyState v-else icon="🚫" title="项目不存在" desc="请返回项目列表重新选择。" />

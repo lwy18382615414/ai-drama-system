@@ -10,6 +10,8 @@ export interface GenerationTask {
   taskType: string
   provider: string | null
   model: string | null
+  inputJson: string | null
+  outputJson: string | null
   status: string
   retryCount: number
   errorMessage: string | null

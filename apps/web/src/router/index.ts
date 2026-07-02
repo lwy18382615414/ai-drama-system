@@ -17,6 +17,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '项目列表' },
       },
       {
+        path: 'projects/new',
+        name: 'project-new',
+        component: () => import('@/pages/ProjectCreateWizardPage.vue'),
+        meta: { title: '新建项目' },
+      },
+      {
         path: 'projects/:id',
         name: 'project-overview',
         component: () => import('@/pages/ProjectOverviewPage.vue'),
@@ -27,6 +33,12 @@ const routes: RouteRecordRaw[] = [
         name: 'novel',
         component: () => import('@/pages/NovelImportPage.vue'),
         meta: { title: '小说与事件', step: 'novel' },
+      },
+      {
+        path: 'projects/:id/novel/import',
+        name: 'novel-import',
+        component: () => import('@/pages/NovelImportWizardPage.vue'),
+        meta: { title: '导入章节', step: 'novel' },
       },
       {
         path: 'projects/:id/episodes',

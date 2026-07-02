@@ -55,6 +55,7 @@ Current API codes:
 - `40002` invalid query parameter
 - `40401` resource not found
 - `40901` resource conflict
+- `41301` payload too large
 - `50001` internal server error
 
 ## Health
@@ -75,13 +76,57 @@ Lists projects.
 
 Creates a project. Returns `201 Created`.
 
+### `POST /api/projects/from-novel`
+
+Novel-driven project creation (the standard creation path in the UI). Body:
+
+- `title` (optional; falls back to `novelMeta.title`, then `未命名项目`)
+- `source`: `paste` | `txt` | `epub`
+- `chapters[]`: `{ title, content }` (1–1000)
+- `novelMeta` (optional): `{ title, author }` from the source file
+
+In one transaction it creates a draft project, imports the chapters, and records a pending `project_profile` generation task, then runs ProjectProfileAgent in the background. Returns `201` with `{ project, chapters, taskId, taskStatus }`. The client polls `GET /api/generation-tasks/:taskId`; the completed task's `outputJson` holds the suggested `{ title, description, genre, visualStyle }`, which is applied via `PATCH /api/projects/:projectId` after user confirmation (it is never auto-applied).
+
+### `DELETE /api/projects/:projectId`
+
+Deletes a project and cascades to all dependent rows (chapters, events, episodes and their links, scripts, characters/scenes/props, storyboards, agent runs, generation tasks, assets) in one transaction.
+
 ### `GET /api/projects/:projectId`
 
 Fetches one project detail.
 
+### `PATCH /api/projects/:projectId`
+
+Updates project basic information. Supported fields:
+
+- `title`
+- `description`
+- `genre`
+- `targetPlatform`
+- `visualStyle`
+- `episodeDuration`
+
+Returns the updated project detail.
+
 ### `GET /api/projects/:projectId/chapters`
 
 Lists source chapters for a project.
+
+### `POST /api/projects/:projectId/chapters/import`
+
+Appends chapters to an existing project. Body: `{ source: 'paste' | 'txt' | 'epub', chapters: [{ title, content }] }`. Chapter numbers continue after the project's current max. Returns `201 Created`.
+
+## Novel Preview Routes
+
+Implemented by `apps/server/routes/novel.ts`. Both endpoints are project-agnostic (usable before a project exists) and persist nothing.
+
+### `POST /api/novel/preview`
+
+Splits pasted novel text into chapter candidates using heading detection (`第X章` / `Chapter N` / numbered lists) with a length-based fallback. Body: `{ text }` (max 2,000,000 chars). Returns `{ chapters: [{ title, content, wordCount }], meta: null }`.
+
+### `POST /api/novel/preview-file`
+
+Multipart upload (`file` field) of an `.epub` file (max 30MB, `413` above the limit). Parses the EPUB spine/TOC into chapters server-side; oversized sections (>10,000 chars) and single-HTML books are re-split by heading detection. DRM-protected EPUBs are rejected with `400`. Returns `{ chapters, meta: { title, author } }`.
 
 ## Event Extraction Routes
 

@@ -95,6 +95,27 @@ export type {
   ExtractedScene,
 } from './extract-agent/index.js'
 export {
+  ProjectProfileAgent,
+  runProjectProfileAgent,
+  buildProjectProfileAgentContext,
+  buildProjectProfileAgentSystemPrompt,
+  buildProjectProfileAgentUserPrompt,
+  NovelMetaSchema,
+  ProjectProfileAgentFailureResultSchema,
+  ProjectProfileAgentInputSchema,
+  ProjectProfileAgentOptionsSchema,
+  ProjectProfileAgentOutputSchema,
+  ProjectProfileAgentResultSchema,
+  ProjectProfileAgentSuccessResultSchema,
+} from './project-profile-agent/index.js'
+export type {
+  NovelMeta,
+  ProjectProfileAgentInput,
+  ProjectProfileAgentOptions,
+  ProjectProfileAgentOutput,
+  ProjectProfileAgentResult,
+} from './project-profile-agent/index.js'
+export {
   StoryboardAgent,
   runStoryboardAgent,
   buildStoryboardAgentContext,

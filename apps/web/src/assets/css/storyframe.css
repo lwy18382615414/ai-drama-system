@@ -242,8 +242,9 @@ h4 {
   padding: 24px 28px 40px;
 }
 .sf-content__inner {
-  max-width: 1180px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 /* -------------------------------------------------------------- page head */

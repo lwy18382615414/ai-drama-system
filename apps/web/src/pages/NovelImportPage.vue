@@ -1,5 +1,76 @@
+<template>
+  <div>
+    <div class="sf-page-head">
+      <div>
+        <h1 class="sf-page-title">小说与事件</h1>
+        <p class="sf-page-desc">导入小说章节，由 EventAgent 提取结构化事件。</p>
+      </div>
+      <n-button type="primary" @click="goImport">＋ 导入章节</n-button>
+    </div>
+
+    <PipelineSteps active-key="novel" />
+
+    <n-spin :show="chaptersLoading">
+    <div class="sf-grid sf-grid--2">
+      <PanelCard title="章节" framed>
+        <EmptyState v-if="!projectChapters.length" icon="📖" title="尚无章节" desc="该项目还没有导入任何小说章节。">
+          <n-button type="primary" @click="goImport">＋ 导入章节</n-button>
+        </EmptyState>
+        <table v-else class="sf-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>标题</th>
+              <th>字数</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="c in projectChapters"
+              :key="c.id"
+              :style="{ cursor: 'pointer', background: c.id === selectedChapter ? 'var(--sf-panel-2)' : '' }"
+              @click="selectedChapter = c.id"
+            >
+              <td><strong>{{ c.chapterNo }}</strong></td>
+              <td><strong>{{ c.title }}</strong></td>
+              <td>{{ c.wordCount }}</td>
+              <td><StatusBadge :status="toPipelineStatus(c.status)" /></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <n-button
+          class="sf-mt-16"
+          type="primary"
+          :loading="extracting"
+          :disabled="!selectedChapter"
+          @click="extract"
+        >
+          ✨ 提取事件
+        </n-button>
+      </PanelCard>
+
+      <PanelCard :title="`已提取事件 · ${chapterEvents.length}`">
+        <EmptyState v-if="!chapterEvents.length" icon="🔍" title="该章节暂无事件" desc="点击“提取事件”开始生成。" />
+        <ol v-else style="margin: 0; padding-left: 18px; display: grid; gap: 12px">
+          <li v-for="ev in chapterEvents" :key="ev.id">
+            <div class="sf-mb-8">{{ ev.summary }}</div>
+            <div class="sf-row sf-wrap">
+              <span class="sf-tag">📍 {{ ev.location }}</span>
+              <span v-for="ch in ev.characters" :key="ch" class="sf-tag">🎭 {{ ch }}</span>
+            </div>
+          </li>
+        </ol>
+      </PanelCard>
+    </div>
+    </n-spin>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { getProjectChapters, type NovelChapter } from '@/api/projects'
 import { extractEvents, getChapterEvents, getEventExtractionStatus, type EventExtractionTask } from '@/api/events'
 import type { NovelEvent } from '@/api/episodes'
@@ -13,13 +84,17 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 const message = useMessage()
+const router = useRouter()
 const { projectId } = useProject()
 
 const projectChapters = ref<NovelChapter[]>([])
 const chaptersLoading = ref(false)
 const selectedChapter = ref('')
 const chapterEvents = ref<NovelEvent[]>([])
-const draft = ref('')
+
+function goImport() {
+  void router.push({ name: 'novel-import', params: { id: projectId.value } })
+}
 
 async function loadChapters() {
   if (!projectId.value) return
@@ -74,73 +149,3 @@ async function extract() {
   }
 }
 </script>
-
-<template>
-  <div>
-    <div class="sf-page-head">
-      <div>
-        <h1 class="sf-page-title">小说与事件</h1>
-        <p class="sf-page-desc">导入小说章节，由 EventAgent 提取结构化事件。</p>
-      </div>
-    </div>
-
-    <PipelineSteps active-key="novel" />
-
-    <n-spin :show="chaptersLoading">
-    <div class="sf-grid sf-grid--2">
-      <PanelCard title="章节" framed>
-        <EmptyState v-if="!projectChapters.length" icon="📖" title="尚无章节" desc="该项目还没有导入任何小说章节。" />
-        <table v-else class="sf-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>标题</th>
-              <th>字数</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="c in projectChapters"
-              :key="c.id"
-              :style="{ cursor: 'pointer', background: c.id === selectedChapter ? 'var(--sf-panel-2)' : '' }"
-              @click="selectedChapter = c.id"
-            >
-              <td><strong>{{ c.chapterNo }}</strong></td>
-              <td><strong>{{ c.title }}</strong></td>
-              <td>{{ c.wordCount }}</td>
-              <td><StatusBadge :status="toPipelineStatus(c.status)" /></td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="sf-field sf-mt-16">
-          <label class="sf-label">粘贴新章节正文</label>
-          <n-input
-            v-model:value="draft"
-            type="textarea"
-            placeholder="在此粘贴小说章节文本…（暂未提供导入接口）"
-            :autosize="{ minRows: 8, maxRows: 14 }"
-          />
-        </div>
-        <n-button type="primary" :loading="extracting" :disabled="!selectedChapter" @click="extract">
-          ✨ 提取事件
-        </n-button>
-      </PanelCard>
-
-      <PanelCard :title="`已提取事件 · ${chapterEvents.length}`">
-        <EmptyState v-if="!chapterEvents.length" icon="🔍" title="该章节暂无事件" desc="点击“提取事件”开始生成。" />
-        <ol v-else style="margin: 0; padding-left: 18px; display: grid; gap: 12px">
-          <li v-for="ev in chapterEvents" :key="ev.id">
-            <div class="sf-mb-8">{{ ev.summary }}</div>
-            <div class="sf-row sf-wrap">
-              <span class="sf-tag">📍 {{ ev.location }}</span>
-              <span v-for="ch in ev.characters" :key="ch" class="sf-tag">🎭 {{ ch }}</span>
-            </div>
-          </li>
-        </ol>
-      </PanelCard>
-    </div>
-    </n-spin>
-  </div>
-</template>

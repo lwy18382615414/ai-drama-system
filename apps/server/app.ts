@@ -15,6 +15,7 @@ const STATIC_URL_BASE = '/static'
 import { createAssetRoutes } from './routes/assets.js'
 import { createEventAgentRoutes } from './routes/event-agent.js'
 import { createEpisodePlannerRoutes } from './routes/episode-planner.js'
+import { createNovelRoutes } from './routes/novel.js'
 import { createProjectRoutes } from './routes/project.js'
 import { createScriptRoutes } from './routes/script.js'
 import { createStoryboardRoutes } from './routes/storyboard.js'
@@ -43,7 +44,8 @@ export async function createApp() {
   app.onError((error, c) => internalError(c, error))
 
   app.get('/health', (c) => ok(c, { ok: true }))
-  app.route('/', createProjectRoutes({ db }))
+  app.route('/', createNovelRoutes())
+  app.route('/', createProjectRoutes({ db, provider }))
   app.route('/api/agents/event', createEventAgentRoutes({ db, provider }))
   app.route('/', createEpisodePlannerRoutes({ db, provider }))
   app.route('/', createScriptRoutes({ db, provider }))

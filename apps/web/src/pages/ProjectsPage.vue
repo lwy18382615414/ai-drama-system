@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { listProjects, type ProjectSummary } from '@/api/projects'
+import { deleteProject, listProjects, type ProjectSummary } from '@/api/projects'
 import { getApiErrorMessage } from '@/api/client'
 import { toPipelineStatus } from '@/utils/status'
 import StatusBadge from '@/components/StatusBadge.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import CreateProjectModal from '@/components/CreateProjectModal.vue'
 
 const message = useMessage()
+const dialog = useDialog()
 const router = useRouter()
 const projects = ref<ProjectSummary[]>([])
 const loading = ref(false)
-const showCreateModal = ref(false)
 
 async function load() {
   loading.value = true
@@ -26,8 +25,26 @@ async function load() {
   }
 }
 
-function onCreated(project: ProjectSummary) {
-  router.push({ name: 'project-overview', params: { id: project.id } })
+function goCreate() {
+  void router.push({ name: 'project-new' })
+}
+
+function confirmDelete(project: ProjectSummary) {
+  dialog.warning({
+    title: '删除项目',
+    content: `确定删除项目“${project.title}”吗？其章节、剧集、剧本、素材等所有数据将一并删除，且无法恢复。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteProject(project.id)
+        message.success('项目已删除')
+        void load()
+      } catch (error) {
+        message.error(getApiErrorMessage(error))
+      }
+    },
+  })
 }
 
 onMounted(load)
@@ -40,12 +57,12 @@ onMounted(load)
         <h1 class="sf-page-title">全部项目</h1>
         <p class="sf-page-desc">从小说到分镜，管理你的 AI 短剧生产流水线。</p>
       </div>
-      <n-button type="primary" @click="showCreateModal = true">＋ 新建项目</n-button>
+      <n-button type="primary" @click="goCreate">＋ 新建项目</n-button>
     </div>
 
     <n-spin :show="loading">
-      <EmptyState v-if="!loading && !projects.length" icon="📁" title="暂无项目" desc="还没有创建任何项目。">
-        <n-button type="primary" @click="showCreateModal = true">＋ 新建项目</n-button>
+      <EmptyState v-if="!loading && !projects.length" icon="📁" title="暂无项目" desc="从一本小说开始创建你的第一个短剧项目。">
+        <n-button type="primary" @click="goCreate">＋ 新建项目</n-button>
       </EmptyState>
       <div v-else class="sf-grid sf-grid--cards">
         <RouterLink
@@ -57,7 +74,18 @@ onMounted(load)
           <div class="sf-card__body">
             <div class="sf-row sf-row--between sf-mb-8">
               <h3 class="sf-card__title">{{ p.title }}</h3>
-              <StatusBadge :status="toPipelineStatus(p.status)" />
+              <div class="sf-row" style="gap: 8px; align-items: center">
+                <StatusBadge :status="toPipelineStatus(p.status)" />
+                <n-button
+                  quaternary
+                  circle
+                  size="tiny"
+                  title="删除项目"
+                  @click.prevent.stop="confirmDelete(p)"
+                >
+                  🗑
+                </n-button>
+              </div>
             </div>
             <p class="sf-muted" style="min-height: 42px">{{ p.description }}</p>
 
@@ -76,7 +104,5 @@ onMounted(load)
         </RouterLink>
       </div>
     </n-spin>
-
-    <CreateProjectModal v-model:show="showCreateModal" @created="onCreated" />
   </div>
 </template>

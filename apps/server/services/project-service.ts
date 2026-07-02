@@ -1,11 +1,22 @@
 import { eq, inArray, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod/v4'
+import {
+  NovelMetaSchema,
+  ProjectProfileAgentOptionsSchema,
+  runProjectProfileAgent,
+} from '../../../packages/agents/index.js'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import {
+  agentRuns,
   assets,
   characters,
+  episodeCharacterLinks,
+  episodeEventLinks,
+  episodePropLinks,
+  episodeSceneLinks,
   episodes,
+  generationTasks,
   novelChapters,
   novelEvents,
   projects,
@@ -14,6 +25,8 @@ import {
   scripts,
   storyboards,
 } from '../../../packages/database/index.js'
+import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import { countWords } from './novel-splitter.js'
 
 export class ProjectServiceError extends Error {
   constructor(
@@ -34,6 +47,21 @@ export const CreateProjectRequestSchema = z.object({
 })
 
 export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>
+
+export const UpdateProjectRequestSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    description: z.string().nullable().optional(),
+    genre: z.string().min(1).optional(),
+    targetPlatform: z.string().min(1).optional(),
+    visualStyle: z.string().min(1).optional(),
+    episodeDuration: z.number().int().positive().optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: 'Project update requires at least one field',
+  })
+
+export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequestSchema>
 
 /**
  * Aggregate image-completion percentage for a project: completed image assets over
@@ -256,4 +284,165 @@ export async function createProject(db: DatabaseClient, request: CreateProjectRe
   await db.insert(projects).values(values)
 
   return values
+}
+
+export const CreateProjectFromNovelRequestSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  source: z.enum(['paste', 'txt', 'epub']),
+  chapters: z
+    .array(
+      z.object({
+        title: z.string().max(200).nullable(),
+        content: z.string().min(1),
+      }),
+    )
+    .min(1)
+    .max(1000),
+  novelMeta: NovelMetaSchema.optional(),
+  options: ProjectProfileAgentOptionsSchema.optional(),
+})
+
+export type CreateProjectFromNovelRequest = z.infer<typeof CreateProjectFromNovelRequestSchema>
+
+export interface CreateProjectFromNovelDeps {
+  db: DatabaseClient
+  provider: StructuredTextProvider
+}
+
+/**
+ * Novel-driven project creation: inserts a draft project, imports its chapters,
+ * and records a pending `project_profile` task in one transaction, then kicks
+ * off ProjectProfileAgent in the background. The frontend polls the returned
+ * task and applies the confirmed profile via PATCH /api/projects/:id.
+ */
+export async function createProjectFromNovel(deps: CreateProjectFromNovelDeps, request: CreateProjectFromNovelRequest) {
+  const now = new Date().toISOString()
+  const projectId = nanoid()
+  const taskId = nanoid()
+
+  const project = {
+    id: projectId,
+    title: request.title ?? request.novelMeta?.title ?? '未命名项目',
+    description: null,
+    genre: 'drama',
+    targetPlatform: 'short_video',
+    visualStyle: 'realistic',
+    episodeDuration: 60,
+    status: 'draft',
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  const chapterRows = request.chapters.map((chapter, index) => ({
+    id: nanoid(),
+    projectId,
+    chapterNo: index + 1,
+    title: chapter.title,
+    content: chapter.content,
+    wordCount: countWords(chapter.content),
+    source: request.source,
+    status: 'pending',
+    createdAt: now,
+    updatedAt: now,
+  }))
+
+  const agentInput = {
+    projectId,
+    taskId,
+    novelMeta: request.novelMeta,
+    options: request.options,
+  }
+
+  await deps.db.transaction(async (tx) => {
+    await tx.insert(projects).values(project)
+    await tx.insert(novelChapters).values(chapterRows)
+    await tx.insert(generationTasks).values({
+      id: taskId,
+      projectId,
+      episodeId: null,
+      storyboardId: null,
+      taskType: 'project_profile',
+      provider: deps.provider.name,
+      model: request.options?.model ?? deps.provider.model,
+      inputJson: JSON.stringify(agentInput),
+      outputJson: null,
+      status: 'pending',
+      retryCount: 0,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+  })
+
+  setTimeout(() => {
+    void runProjectProfileAgent({
+      db: deps.db,
+      provider: deps.provider,
+      input: agentInput,
+    })
+  }, 0)
+
+  return { project, chapters: chapterRows, taskId, taskStatus: 'pending' as const }
+}
+
+/** Deletes a project and every dependent row. SQLite FKs here have no ON DELETE CASCADE, so cascade manually. */
+export async function deleteProject(db: DatabaseClient, projectId: string) {
+  const [project] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1)
+
+  if (!project) {
+    throw new ProjectServiceError(`Project not found: ${projectId}`, 404)
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(assets).where(eq(assets.projectId, projectId))
+    await tx.delete(generationTasks).where(eq(generationTasks.projectId, projectId))
+    await tx.delete(agentRuns).where(eq(agentRuns.projectId, projectId))
+    await tx.delete(storyboards).where(eq(storyboards.projectId, projectId))
+    await tx.delete(episodePropLinks).where(eq(episodePropLinks.projectId, projectId))
+    await tx.delete(episodeSceneLinks).where(eq(episodeSceneLinks.projectId, projectId))
+    await tx.delete(episodeCharacterLinks).where(eq(episodeCharacterLinks.projectId, projectId))
+    await tx.delete(episodeEventLinks).where(eq(episodeEventLinks.projectId, projectId))
+    await tx.delete(props).where(eq(props.projectId, projectId))
+    await tx.delete(scenes).where(eq(scenes.projectId, projectId))
+    await tx.delete(characters).where(eq(characters.projectId, projectId))
+    await tx.delete(scripts).where(eq(scripts.projectId, projectId))
+    await tx.delete(episodes).where(eq(episodes.projectId, projectId))
+    await tx.delete(novelEvents).where(eq(novelEvents.projectId, projectId))
+    await tx.delete(novelChapters).where(eq(novelChapters.projectId, projectId))
+    await tx.delete(projects).where(eq(projects.id, projectId))
+  })
+}
+
+export async function updateProject(
+  db: DatabaseClient,
+  projectId: string,
+  request: UpdateProjectRequest,
+): Promise<ProjectDetail> {
+  const existing = await getProjectDetail(db, projectId)
+
+  if (!existing) {
+    throw new ProjectServiceError(`Project not found: ${projectId}`, 404)
+  }
+
+  const updates: Partial<typeof projects.$inferInsert> = {
+    updatedAt: new Date().toISOString(),
+  }
+
+  if (request.title !== undefined) updates.title = request.title
+  if (request.description !== undefined) updates.description = request.description
+  if (request.genre !== undefined) updates.genre = request.genre
+  if (request.targetPlatform !== undefined) updates.targetPlatform = request.targetPlatform
+  if (request.visualStyle !== undefined) updates.visualStyle = request.visualStyle
+  if (request.episodeDuration !== undefined) updates.episodeDuration = request.episodeDuration
+
+  await db.update(projects).set(updates).where(eq(projects.id, projectId))
+
+  const updated = await getProjectDetail(db, projectId)
+  if (!updated) {
+    throw new ProjectServiceError(`Project not found: ${projectId}`, 404)
+  }
+
+  return updated
 }
