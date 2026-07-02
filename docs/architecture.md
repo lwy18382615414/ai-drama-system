@@ -20,7 +20,7 @@ Current Phase 1 output:
 - props
 - storyboards
 
-Active mock media output, Phase 2A–2C:
+Active image output, Phase 2A–2C:
 
 - character reference images
 - scene reference images
@@ -28,7 +28,7 @@ Active mock media output, Phase 2A–2C:
 
 Future media output, currently paused in later Phase 2:
 
-- real image provider integration and refined visual prompts
+- refined visual prompts
 - video prompts and generated videos
 - TTS audio
 - subtitles
@@ -82,7 +82,7 @@ Extracts reusable production assets from scripts and links them back to the epis
 
 Creates shot-level storyboards from the script and extracted assets.
 
-## Completed Scope: Phase 2A–2C Mock Image Generation
+## Completed Scope: Phase 2A–2C Image Generation
 
 Phase 2A provides ImageProvider + image task infrastructure. Phase 2B adds the character reference image loop. Phase 2C adds scene reference images, storyboard first frames, and episode-level batch generation.
 
@@ -94,7 +94,7 @@ image generation request (single target or episode batch)
 ↓
 `generation_tasks` image task
 ↓
-`MockImageProvider`
+configured `ImageProvider`
 ↓
 `assets` record
 ↓
@@ -106,14 +106,15 @@ Active generated targets and updated URL fields:
 - `scene_reference_image` → `scenes.reference_image_url`
 - `storyboard_first_frame` → `storyboards.first_frame_image_url`
 
-Episode-level batch routes generate images for all episode-linked characters, scenes, or storyboard shots, skipping targets that already have an image unless `force=true`. No real image model provider is active; all image generation uses `MockImageProvider`.
+Episode-level batch routes generate images for all episode-linked characters, scenes, or storyboard shots, skipping targets that already have an image unless `force=true`. Runtime image generation uses `OpenAICompatibleImageProvider`; `MockImageProvider` is retained only for tests.
 
 ## Text Provider Selection
 
-The server composition root selects the structured text provider from environment variables:
+The server composition root constructs the structured text provider from required environment variables:
 
-- `TEXT_PROVIDER_API_KEY` set → `OpenAICompatibleTextProvider` (requires `TEXT_PROVIDER_BASE_URL`, optional `TEXT_PROVIDER_MODEL`)
-- otherwise → `MockStructuredTextProvider`
+- `TEXT_PROVIDER_API_KEY`
+- `TEXT_PROVIDER_BASE_URL`
+- `TEXT_PROVIDER_MODEL` optional model override
 
 ## Frontend Workbench
 
@@ -165,7 +166,7 @@ Phase 1 currently exercises:
 - database persistence
 - agent run logging
 
-Phase 2A–2C currently exercise the image provider adapter, task status persistence, database persistence, asset provenance records, and character/scene/storyboard image URL updates through `MockImageProvider`, including episode-level batch generation. The frontend workbench and axios API client are also active. Object storage, real image/video/audio provider adapters, FFmpeg composition, and final video export remain later Phase 2+ concerns and are currently paused.
+Phase 2A–2C currently exercise the image provider adapter, task status persistence, database persistence, asset provenance records, and character/scene/storyboard image URL updates through `OpenAICompatibleImageProvider`, including episode-level batch generation. The frontend workbench and axios API client are also active. Object storage, video/audio provider adapters, FFmpeg composition, and final video export remain later Phase 2+ concerns and are currently paused.
 
 ## MVP Scope
 

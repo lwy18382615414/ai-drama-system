@@ -8,7 +8,6 @@ import { useProject } from '@/composables/useProject'
 import PipelineSteps from '@/components/PipelineSteps.vue'
 import PanelCard from '@/components/PanelCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import MockButton from '@/components/MockButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 const message = useMessage()
@@ -69,10 +68,10 @@ watch(projectId, loadEpisodes)
 
           <div class="sf-row sf-mt-16 sf-gap-16">
             <RouterLink :to="{ name: 'script', params: { id: projectId, episodeId: ep.id } }">
-              <MockButton label="剧本" size="sm" icon="📝" />
+              <n-button size="small">剧本</n-button>
             </RouterLink>
             <RouterLink :to="{ name: 'storyboards', params: { id: projectId, episodeId: ep.id } }">
-              <MockButton label="分镜" size="sm" icon="🎞️" />
+              <n-button size="small">分镜</n-button>
             </RouterLink>
           </div>
         </PanelCard>

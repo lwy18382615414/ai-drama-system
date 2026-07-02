@@ -13,7 +13,6 @@ import { getApiErrorMessage } from "@/api/client";
 import { useProject } from "@/composables/useProject";
 import PipelineSteps from "@/components/PipelineSteps.vue";
 import PanelCard from "@/components/PanelCard.vue";
-import MockButton from "@/components/MockButton.vue";
 
 const message = useMessage();
 const { projectId } = useProject();
@@ -55,12 +54,6 @@ watch(projectId, loadAssets);
         <h1 class="sf-page-title">角色 / 场景 / 道具</h1>
         <p class="sf-page-desc">ExtractAgent 从剧本中提取的可复用生产资产。</p>
       </div>
-      <MockButton
-        label="重新提取资产"
-        variant="primary"
-        icon="🔁"
-        hint="需先在剧集规划页选择 episode，本页暂未接入"
-      />
     </div>
 
     <PipelineSteps active-key="assets" />
@@ -99,11 +92,9 @@ watch(projectId, loadAssets);
                 class="sf-mt-8"
                 style="display: inline-block"
               >
-                <MockButton
-                  :label="ch.referenceImageUrl ? '查看参考图' : '生成参考图'"
-                  size="sm"
-                  icon="🖼️"
-                />
+                <n-button size="small">
+                  {{ ch.referenceImageUrl ? '查看参考图' : '生成参考图' }}
+                </n-button>
               </RouterLink>
             </div>
           </div>

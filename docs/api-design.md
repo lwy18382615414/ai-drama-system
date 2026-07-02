@@ -2,13 +2,13 @@
 
 ## Overview
 
-This document records the completed Phase 1 API surface, the Phase 2A image task infrastructure, and the completed Phase 2B–2C mock image generation loops (character reference images, scene reference images, storyboard first frames, and episode-level batch generation).
+This document records the completed Phase 1 API surface, the Phase 2A image task infrastructure, and the completed Phase 2B–2C image generation loops (character reference images, scene reference images, storyboard first frames, and episode-level batch generation).
 
 Phase 1 is complete:
 
 novel_chapters → novel_events → episodes + episode_event_links → scripts → characters/scenes/props → storyboards
 
-Phase 2A provides `ImageProvider`, mock image generation tasks, and image asset records. Phase 2B–2C activate character, scene, and storyboard first-frame mock image generation, including episode-level batch routes. Later Phase 2 APIs for real image providers, video generation, TTS, subtitle, FFmpeg composition, and final video export remain paused.
+Phase 2A provides `ImageProvider`, image generation tasks, and image asset records. Phase 2B–2C activate character, scene, and storyboard first-frame image generation, including episode-level batch routes. Later Phase 2 APIs for video generation, TTS, subtitle, FFmpeg composition, and final video export remain paused.
 
 ## Route Mounting
 
@@ -232,29 +232,29 @@ Implemented by `apps/server/routes/image-generation.ts` and `apps/server/service
 All image routes share these behaviors:
 
 - create a `generation_tasks` row with `task_type = image_generation`
-- call `MockImageProvider` only
+- call the configured runtime `ImageProvider`
 - write `assets` rows
 - update the corresponding target URL field
 - support `force` through request body or query string; when `force` is false and the target already has an image URL, generation is skipped
-- do not call real image models
+- runtime image generation uses `OpenAICompatibleImageProvider`; tests inject `MockImageProvider`
 
 ### Single-target routes
 
 #### `POST /api/characters/:characterId/generate-image`
 
-Starts a mock character reference image task for one character. Builds the prompt from `characters.name`, `role`, `appearance`, `personality`, and project `visual_style`. Writes `asset_type = character_reference_image` and updates `characters.reference_image_url`. Returns `202 Accepted` with `{ taskId, status }`.
+Starts a character reference image task for one character. Builds the prompt from `characters.name`, `role`, `appearance`, `personality`, and project `visual_style`. Writes `asset_type = character_reference_image` and updates `characters.reference_image_url`. Returns `202 Accepted` with `{ taskId, status }`.
 
 #### `POST /api/scenes/:sceneId/generate-image`
 
-Starts a mock scene reference image task for one scene. Builds the prompt from `scenes.visual_prompt`, `name`, `description`, `location_type`, scene `visual_style`, and project `visual_style`. Writes `asset_type = scene_reference_image` and updates `scenes.reference_image_url`. Returns `202 Accepted`.
+Starts a scene reference image task for one scene. Builds the prompt from `scenes.visual_prompt`, `name`, `description`, `location_type`, scene `visual_style`, and project `visual_style`. Writes `asset_type = scene_reference_image` and updates `scenes.reference_image_url`. Returns `202 Accepted`.
 
 #### `POST /api/storyboards/:storyboardId/generate-first-frame`
 
-Starts a mock storyboard first-frame task for one shot. Composes the prompt from `storyboards.image_prompt` plus linked scene and character context (including existing reference image URLs). Writes `asset_type = storyboard_first_frame` and updates `storyboards.first_frame_image_url`. Returns `202 Accepted`.
+Starts a storyboard first-frame task for one shot. Composes the prompt from `storyboards.image_prompt` plus linked scene and character context (including existing reference image URLs). Writes `asset_type = storyboard_first_frame` and updates `storyboards.first_frame_image_url`. Returns `202 Accepted`.
 
 #### `POST /api/projects/:projectId/generate-image`
 
-Starts a mock image generation task for one explicitly specified target. Accepts a body with `target_type` and `target_id`.
+Starts an image generation task for one explicitly specified target. Accepts a body with `target_type` and `target_id`.
 
 Supported `target_type` values:
 
@@ -266,7 +266,7 @@ Returns `202 Accepted`.
 
 ### Episode-level batch routes
 
-Each batch route resolves all episode-linked targets, skips targets that already have an image unless `force=true`, generates images through the mock provider, and returns `200 OK` with a per-target summary.
+Each batch route resolves all episode-linked targets, skips targets that already have an image unless `force=true`, generates images through the configured provider, and returns `200 OK` with a per-target summary.
 
 - `POST /api/episodes/:episodeId/generate-character-images`
 - `POST /api/episodes/:episodeId/generate-scene-images`

@@ -2,17 +2,21 @@
 
 ## Current Status
 
-Phase 1 is complete, including project management routes, demo seeding, and the Vue 3 workbench frontend.
+Phase 1 is complete, including project management routes and the Vue 3 workbench frontend.
 
-Phase 2A (image task infrastructure), Phase 2B (character reference image loop), and Phase 2C (scene reference images, storyboard first frames, and episode-level batch image generation) are complete. All image generation still uses `MockImageProvider` only.
+Phase 2A (image task infrastructure), Phase 2B (character reference image loop), and Phase 2C (scene reference images, storyboard first frames, and episode-level batch image generation) are complete.
 
-Text generation supports a real OpenAI-compatible provider (`OpenAICompatibleTextProvider`) selected through environment variables, with `MockStructuredTextProvider` as the fallback when no API key is configured.
+At runtime both providers are real and required, and fail fast at startup if unconfigured:
+- Text: `OpenAICompatibleTextProvider` via `TEXT_PROVIDER_*` environment variables.
+- Image: `OpenAICompatibleImageProvider` (default model `gpt-image-2`) via `IMAGE_PROVIDER_*` environment variables; generated images are written to `STATIC_DIR` (default `data/static`) and served under `/static`.
+
+`MockStructuredTextProvider` and `MockImageProvider` are retained only as test doubles.
 
 Later Phase 2 media generation remains paused.
 
 Phase 3+ has not started.
 
-Do not implement real image providers, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2C.
+Do not implement video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2C.
 
 ## Phase 1: Completed Backend Narrative Pipeline
 
@@ -81,16 +85,16 @@ Status: complete.
 Scope:
 
 - Add `OpenAICompatibleTextProvider` in `packages/providers/openai-compatible-text-provider.ts`, implementing `StructuredTextProvider` against any OpenAI-compatible chat completion endpoint.
-- Select the provider in the server composition root (`apps/server/app.ts`) through environment variables:
-  - `TEXT_PROVIDER_API_KEY` — enables the real provider; when absent, `MockStructuredTextProvider` is used
-  - `TEXT_PROVIDER_BASE_URL` — required when the API key is set
+- Construct the provider in the server composition root (`apps/server/app.ts`) through required environment variables:
+  - `TEXT_PROVIDER_API_KEY` — required
+  - `TEXT_PROVIDER_BASE_URL` — required
   - `TEXT_PROVIDER_MODEL` — optional model override
 - Provide a smoke test via `npm run smoke:text-provider` (`scripts/smoke-test-text-provider.ts`).
 
 Boundary notes:
 
 - This applies to structured text generation for the Phase 1 agents only.
-- It does not change the image-side boundary: image generation remains mock-only.
+- Image generation has its own required `OpenAICompatibleImageProvider` runtime configuration.
 
 ## Phase 2A: Active ImageProvider + Image Task Infrastructure
 
@@ -98,7 +102,7 @@ Status: complete.
 
 Scope:
 
-- Add `ImageProvider` and `MockImageProvider`.
+- Add `ImageProvider`, `OpenAICompatibleImageProvider`, and `MockImageProvider` test coverage.
 - Create image `generation_tasks` with `task_type = image_generation`.
 - Track polymorphic image targets through `target_type` and `target_id`.
 - Record generated image assets in `assets`.
@@ -109,9 +113,9 @@ Scope:
 
 Boundary notes:
 
-- Only `MockImageProvider` is active.
-- No real image model integration is part of Phase 2A.
-- Existing storyboard `image_prompt` remains a planning field used as input to mock image task infrastructure.
+- `OpenAICompatibleImageProvider` is active at runtime and fails fast when unconfigured.
+- `MockImageProvider` is retained only as a deterministic test double.
+- Existing storyboard `image_prompt` remains a planning field used as input to image task infrastructure.
 
 ## Phase 2B: Character Reference Image Loop
 
@@ -122,16 +126,16 @@ Scope:
 - Add `POST /api/characters/:characterId/generate-image` for one character at a time.
 - Build prompts from character name, role, appearance, personality, and project `visual_style`.
 - Use the existing async `generation_tasks` image task lifecycle.
-- Use `MockImageProvider` only.
+- Use the configured `ImageProvider` adapter.
 - Write `assets.asset_type = character_reference_image`.
 - Update `characters.reference_image_url` when the task completes.
 - Support `force=true` regeneration while avoiding duplicate work when a reference image already exists.
 
 Boundary notes:
 
-- No real image model integration is part of Phase 2B.
+- Runtime image generation uses `OpenAICompatibleImageProvider`; tests inject `MockImageProvider`.
 
-## Phase 2C: Scene, Storyboard First-Frame, and Batch Mock Image Generation
+## Phase 2C: Scene, Storyboard First-Frame, and Batch Image Generation
 
 Status: complete.
 
@@ -150,12 +154,11 @@ Scope:
   - `POST /api/episodes/:episodeId/generate-all-images`
   - Batch routes iterate over episode-linked targets, skip targets that already have an image unless `force=true`, and return a per-target summary.
 - Add `GET /api/episodes/:episodeId/image-generation-status` for episode-level image progress counts.
-- All generation uses `MockImageProvider` and the same `generation_tasks` + `assets` lifecycle as Phase 2B.
+- All generation uses the configured runtime image provider and the same `generation_tasks` + `assets` lifecycle as Phase 2B.
 
 Boundary notes:
 
 - Phase 2C does not activate video, TTS, subtitle, FFmpeg, or final export workflows.
-- No real image model integration is part of Phase 2C.
 
 ## Later Phase 2: Paused Media Generation Pipeline
 
@@ -165,7 +168,6 @@ Do not implement unless explicitly requested.
 
 Potential future areas:
 
-- real image provider integration
 - image prompt refinement
 - video prompt refinement
 - video generation

@@ -10,7 +10,6 @@ import { useProject } from '@/composables/useProject'
 import PipelineSteps from '@/components/PipelineSteps.vue'
 import PanelCard from '@/components/PanelCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import MockButton from '@/components/MockButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 const message = useMessage()
@@ -83,10 +82,9 @@ async function extract() {
         <h1 class="sf-page-title">小说与事件</h1>
         <p class="sf-page-desc">导入小说章节，由 EventAgent 提取结构化事件。</p>
       </div>
-      <MockButton label="导入章节" variant="primary" icon="⬆️" hint="暂未提供导入接口" />
     </div>
 
-    <PipelineSteps active-key="events" />
+    <PipelineSteps active-key="novel" />
 
     <n-spin :show="chaptersLoading">
     <div class="sf-grid sf-grid--2">

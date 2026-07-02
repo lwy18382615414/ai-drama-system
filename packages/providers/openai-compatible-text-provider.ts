@@ -1,5 +1,5 @@
 import { OpenAI } from 'openai'
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import type {
   GenerateStructuredJsonRequest,
   GenerateStructuredJsonResult,

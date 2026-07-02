@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import {
   assets,

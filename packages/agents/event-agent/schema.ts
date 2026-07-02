@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 
 export const EventAgentOptionsSchema = z.object({
   maxEvents: z.number().int().positive().max(100).default(30),

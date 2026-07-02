@@ -25,16 +25,29 @@
 
         <template v-if="project">
           <div class="sf-nav__section">{{ project.title }}</div>
-          <RouterLink
-            v-for="item in nav"
-            :key="item.label"
-            :to="item.to"
-            class="sf-nav__item"
-            active-class="is-active"
-          >
-            <span class="sf-nav__icon"><n-icon :component="item.icon" /></span>
-            {{ item.label }}
-          </RouterLink>
+          <template v-for="item in nav" :key="item.label">
+            <RouterLink
+              v-if="item.to"
+              :to="item.to"
+              class="sf-nav__item"
+              :class="{ 'is-active': isNavActive(item.to) }"
+            >
+              <span class="sf-nav__icon"
+                ><n-icon :component="item.icon"
+              /></span>
+              {{ item.label }}
+            </RouterLink>
+            <div
+              v-else
+              class="sf-nav__item is-disabled"
+              :title="item.disabledHint"
+            >
+              <span class="sf-nav__icon"
+                ><n-icon :component="item.icon"
+              /></span>
+              {{ item.label }}
+            </div>
+          </template>
         </template>
         <template v-else>
           <div class="sf-nav__section">开始</div>
@@ -122,10 +135,13 @@ const nav = computed(() => {
   const pid = projectId.value;
   if (!pid) return [];
   const epId = firstEpisodeId.value;
+  // Episode-scoped pages have no target until at least one episode exists;
+  // such items carry a `disabledHint` instead of `to` and render grayed out.
   const items: Array<{
     icon: typeof HomeOutline;
     label: string;
-    to: RouteLocationRaw;
+    to?: RouteLocationRaw;
+    disabledHint?: string;
   }> = [
     {
       icon: HomeOutline,
@@ -145,9 +161,9 @@ const nav = computed(() => {
     {
       icon: DocumentTextOutline,
       label: "剧本编辑",
-      to: epId
-        ? { name: "script", params: { id: pid, episodeId: epId } }
-        : { name: "episodes", params: { id: pid } },
+      ...(epId
+        ? { to: { name: "script", params: { id: pid, episodeId: epId } } }
+        : { disabledHint: "请先规划剧集" }),
     },
     {
       icon: PeopleOutline,
@@ -157,9 +173,9 @@ const nav = computed(() => {
     {
       icon: AlbumsOutline,
       label: "分镜工作台",
-      to: epId
-        ? { name: "storyboards", params: { id: pid, episodeId: epId } }
-        : { name: "episodes", params: { id: pid } },
+      ...(epId
+        ? { to: { name: "storyboards", params: { id: pid, episodeId: epId } } }
+        : { disabledHint: "请先规划剧集" }),
     },
   ];
 
@@ -176,6 +192,18 @@ const nav = computed(() => {
 
   return items;
 });
+
+/**
+ * Highlight a nav item only when the current route *is* its target route (by
+ * name), rather than the default inclusive prefix match. This prevents siblings
+ * that share a route (e.g. the episode-less fallback to `episodes`) from all
+ * lighting up at once.
+ */
+function isNavActive(to: RouteLocationRaw): boolean {
+  console.log("isNavActive", to, route.name);
+  const name = typeof to === "object" && "name" in to ? to.name : undefined;
+  return name != null && route.name === name;
+}
 
 const pageTitle = computed(
   () => (route.meta.title as string | undefined) ?? "",

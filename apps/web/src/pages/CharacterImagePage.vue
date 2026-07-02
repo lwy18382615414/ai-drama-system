@@ -81,7 +81,7 @@ const currentStatus = computed<PipelineStatus>(() => {
     <div class="sf-page-head">
       <div>
         <h1 class="sf-page-title">角色参考图 · {{ character.name }}</h1>
-        <p class="sf-page-desc">Phase 2B：基于角色描述与项目视觉风格，通过 MockImageProvider 生成参考图。</p>
+        <p class="sf-page-desc">Phase 2B：基于角色描述与项目视觉风格，通过图像 Provider（gpt-image-2）生成参考图。</p>
       </div>
       <div class="sf-row">
         <StatusBadge :status="currentStatus" />

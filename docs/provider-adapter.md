@@ -15,15 +15,14 @@ Responsibilities:
 
 Two implementations exist:
 
-- `MockStructuredTextProvider` — the local fallback, returns deterministic structured output without calling a model.
-- `OpenAICompatibleTextProvider` (`packages/providers/openai-compatible-text-provider.ts`) — calls any OpenAI-compatible chat completion endpoint and returns validated structured JSON.
+- `OpenAICompatibleTextProvider` (`packages/providers/openai-compatible-text-provider.ts`) — calls any OpenAI-compatible chat completion endpoint and returns validated structured JSON. This is the runtime provider.
+- `MockStructuredTextProvider` — a deterministic test double, injected via DI in tests only. It is no longer wired into `apps/server/app.ts`.
 
-The server composition root (`apps/server/app.ts`) selects the provider from environment variables:
+The server composition root (`apps/server/app.ts`) always constructs the real provider and fails fast at startup if it is unconfigured:
 
-- `TEXT_PROVIDER_API_KEY` set → `OpenAICompatibleTextProvider`
-  - `TEXT_PROVIDER_BASE_URL` — required when the API key is set
-  - `TEXT_PROVIDER_MODEL` — optional model override
-- otherwise → `MockStructuredTextProvider`
+- `TEXT_PROVIDER_API_KEY` — required
+- `TEXT_PROVIDER_BASE_URL` — required
+- `TEXT_PROVIDER_MODEL` — optional model override
 
 Do not hardcode API keys; configure them through environment variables only. A smoke test is available via `npm run smoke:text-provider`.
 
@@ -53,8 +52,16 @@ Interface shape:
   - optional `raw`
 - `ImageProvider.generateImage(request)`
 
-`MockImageProvider` is the only active image provider. It does not call a real image model and returns a deterministic local placeholder URL under `/static/mock-images/...`. All Phase 2B–2C image tasks (single-target and episode batch) call this provider through `ImageGenerationService`.
+`OpenAICompatibleImageProvider` (`packages/providers/openai-compatible-image-provider.ts`) is the runtime image provider. It calls an OpenAI-compatible `images.generate` endpoint (default model `gpt-image-2`), downloads the returned base64/URL image, writes it to `STATIC_DIR` (default `data/static`), and returns a `/static/...` URL that `app.ts` serves via `serveStatic`. All Phase 2B–2C image tasks (single-target and episode batch) call this provider through `ImageGenerationService`.
+
+The composition root fails fast at startup if the image provider is unconfigured:
+
+- `IMAGE_PROVIDER_API_KEY` — required
+- `IMAGE_PROVIDER_BASE_URL` — required
+- `IMAGE_PROVIDER_MODEL` — optional model override (default `gpt-image-2`)
+
+`MockImageProvider` is retained only as a deterministic test double, injected via DI in tests. A smoke test is available via `npm run smoke:image-provider`.
 
 ## Boundary
 
-Do not add OpenAI, Gemini, 即梦, 可灵, or other real image providers until Phase 2 is explicitly expanded beyond Phase 2C.
+Video, TTS, subtitle, FFmpeg, and final-export providers remain out of scope until Phase 2 is explicitly expanded beyond Phase 2C.

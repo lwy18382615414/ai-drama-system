@@ -13,7 +13,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     CreateProjectModal: typeof import('./components/CreateProjectModal.vue')['default']
     EmptyState: typeof import('./components/EmptyState.vue')['default']
-    MockButton: typeof import('./components/MockButton.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
     NConfigProvider: typeof import('naive-ui')['NConfigProvider']
     NDataTable: typeof import('naive-ui')['NDataTable']

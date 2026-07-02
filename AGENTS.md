@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Project Overview
 
@@ -62,7 +62,7 @@ The system is built around:
 - Use provider adapters.
 - Store reusable workflow rules in Skill files.
 - Store long design notes in `docs/`.
-- Keep `CLAUDE.md` concise and stable.
+- Keep `AGENTS.md` concise and stable.
 - Do not hardcode API keys.
 - Do not bypass database logging for Agent runs.
 - Do not introduce a new framework without explaining the reason.

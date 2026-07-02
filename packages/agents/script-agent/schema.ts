@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 
 export const ScriptAgentOptionsSchema = z.object({
   model: z.string().optional(),

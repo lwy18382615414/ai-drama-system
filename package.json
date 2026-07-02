@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev:server": "tsx --env-file-if-exists=.env apps/server/index.ts",
-    "seed": "tsx apps/server/seed.ts",
     "smoke:text-provider": "tsx --env-file-if-exists=.env scripts/smoke-test-text-provider.ts",
+    "smoke:image-provider": "tsx --env-file-if-exists=.env scripts/smoke-test-image-provider.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

@@ -179,6 +179,15 @@ h4 {
   color: var(--sf-primary);
   font-weight: 600;
 }
+.sf-nav__item.is-disabled {
+  color: var(--sf-text-faint);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.sf-nav__item.is-disabled:hover {
+  background: none;
+  color: var(--sf-text-faint);
+}
 .sf-nav__icon {
   width: 18px;
   text-align: center;
@@ -279,10 +288,6 @@ h4 {
   background: var(--sf-panel-2);
   border: 1px solid transparent;
 }
-.sf-step.is-done {
-  color: var(--sf-success);
-  border-color: rgba(22, 163, 74, 0.3);
-}
 .sf-step.is-active {
   color: var(--sf-primary);
   background: var(--sf-primary-soft);
@@ -297,10 +302,6 @@ h4 {
   font-size: 11px;
   background: var(--sf-border);
   color: var(--sf-text);
-}
-.sf-step.is-done .sf-step__idx {
-  background: var(--sf-success);
-  color: #fff;
 }
 .sf-step.is-active .sf-step__idx {
   background: var(--sf-primary);

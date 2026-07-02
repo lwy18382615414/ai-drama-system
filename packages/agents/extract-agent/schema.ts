@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import { ScriptAgentOutputSchema } from '../script-agent/schema.js'
 
 const NullableStringSchema = z.string().nullable().optional()

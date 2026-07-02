@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import {
   StoryboardAgentOptionsSchema,
   runStoryboardAgent,

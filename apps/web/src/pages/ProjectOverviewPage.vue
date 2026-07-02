@@ -10,7 +10,6 @@ import PipelineSteps from '@/components/PipelineSteps.vue'
 import StatCard from '@/components/StatCard.vue'
 import PanelCard from '@/components/PanelCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import MockButton from '@/components/MockButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
 const message = useMessage()
@@ -57,20 +56,21 @@ const episodeColumns: DataTableColumns<Episode> = [
       <StatusBadge :status="toPipelineStatus(project.status)" />
     </div>
 
-    <PipelineSteps active-key="storyboard" />
+    <!-- No active-key: on the overview page the strip is a workflow map, not a location tab. -->
+    <PipelineSteps />
 
     <div class="sf-grid sf-grid--stats sf-mb-16">
       <StatCard label="剧集" :value="project.episodeCount" hint="已规划" icon="🎬" />
       <StatCard label="角色" :value="project.characterCount" hint="已提取" icon="🎭" />
       <StatCard label="场景" :value="project.sceneCount" icon="🏞️" />
       <StatCard label="分镜" :value="project.storyboardCount" icon="🎞️" />
-      <StatCard label="参考图进度" :value="project.imageCompletion + '%'" hint="角色参考图" icon="🖼️" />
+      <StatCard label="参考图进度" :value="project.imageCompletion + '%'" hint="角色/场景/分镜图" icon="🖼️" />
     </div>
 
     <PanelCard title="剧集" framed>
       <template #actions>
         <RouterLink :to="{ name: 'episodes', params: { id: projectId } }">
-          <MockButton label="剧集规划" size="sm" variant="ghost" />
+          <n-button size="small" quaternary>剧集规划</n-button>
         </RouterLink>
       </template>
 
