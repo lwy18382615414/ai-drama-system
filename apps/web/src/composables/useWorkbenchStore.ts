@@ -66,9 +66,25 @@ interface EpisodeAssetState {
 export function createWorkbenchStore(projectId: string) {
   const message = useMessage()
   const taskCenterRaw = useTaskCenter()
-  // Every task started from this store belongs to this project — tag it automatically.
-  const taskCenter = { ...taskCenterRaw, register: (taskId: string, opts: RegisterTaskOptions) =>
-    taskCenterRaw.register(taskId, { ...opts, projectId }) }
+  // Every task started from this store belongs to this project — tag it automatically, and
+  // refresh the project's aggregate stage stats (event/episode/script counts etc.) whenever one
+  // finishes, since those live on `state.project` and nothing else invalidates them.
+  const taskCenter = {
+    ...taskCenterRaw,
+    register: (taskId: string, opts: RegisterTaskOptions) =>
+      taskCenterRaw.register(taskId, {
+        ...opts,
+        projectId,
+        onDone: () => {
+          opts.onDone?.()
+          void reloadProject()
+        },
+        onFailed: (msg: string | null) => {
+          opts.onFailed?.(msg)
+          void reloadProject()
+        },
+      }),
+  }
 
   const state = reactive({
     loading: true,
@@ -285,6 +301,7 @@ export function createWorkbenchStore(projectId: string) {
       const result = await generateEpisodeStoryboardFirstFrames(episodeId)
       const { storyboards } = await getEpisodeStoryboards(episodeId)
       state.storyboardsByEpisode.set(episodeId, storyboards)
+      void reloadProject()
       if (result.summary.failed > 0) {
         message.warning(`第 ${ep?.episodeNo ?? ''} 集：${result.summary.completed} 张成功，${result.summary.failed} 张失败`)
       } else {
@@ -368,6 +385,7 @@ export function createWorkbenchStore(projectId: string) {
         state.storyboardsByEpisode.set(episodeId, storyboards)
       }
 
+      void reloadProject()
       message.success(`第 ${ep?.episodeNo ?? ''} 集一键生成完成`)
     } catch (error) {
       message.error(getApiErrorMessage(error))

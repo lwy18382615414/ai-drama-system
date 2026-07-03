@@ -2,6 +2,7 @@
 import { computed, inject, ref, watch } from 'vue'
 import { WorkbenchKey } from '@/composables/workbenchKey'
 import { useTaskCenter } from '@/store/taskCenter'
+import { conflictLevelLabel, eventImportanceLabel, eventTypeLabel } from '@/utils/eventLabels'
 import ImportChaptersDrawer from '@/components/workbench/ImportChaptersDrawer.vue'
 
 const props = defineProps<{ inspectorCollapsed: boolean }>()
@@ -95,7 +96,7 @@ function extract() {
             >
               <span class="wb-enum">事件 {{ String(i + 1).padStart(2, '0') }}</span>
               <span class="wb-etitle">{{ e.summary }}</span>
-              <span class="wb-emeta">{{ e.eventType }} · 重要度 {{ e.importance }} · {{ e.location }}</span>
+              <span class="wb-emeta">{{ eventTypeLabel(e.eventType) }} · 重要度 {{ eventImportanceLabel(e.importance) }} · {{ e.location }}</span>
             </button>
           </template>
 
@@ -120,9 +121,9 @@ function extract() {
       <template v-if="selectedEvent">
         <p class="wb-ihead">事件 {{ String(events.findIndex((e) => e.id === selectedEvent!.id) + 1).padStart(2, '0') }}</p>
         <p class="wb-ititle">{{ selectedEvent.summary }}</p>
-        <div class="wb-frow"><span class="wb-flabel">类型</span><span class="wb-fval"><span class="wb-chip">{{ selectedEvent.eventType }}</span></span></div>
-        <div class="wb-frow"><span class="wb-flabel">重要度</span><span class="wb-fval">{{ selectedEvent.importance }}</span></div>
-        <div class="wb-frow"><span class="wb-flabel">冲突等级</span><span class="wb-fval">{{ selectedEvent.conflictLevel }}</span></div>
+        <div class="wb-frow"><span class="wb-flabel">类型</span><span class="wb-fval"><span class="wb-chip">{{ eventTypeLabel(selectedEvent.eventType) }}</span></span></div>
+        <div class="wb-frow"><span class="wb-flabel">重要度</span><span class="wb-fval">{{ eventImportanceLabel(selectedEvent.importance) }}</span></div>
+        <div class="wb-frow"><span class="wb-flabel">冲突等级</span><span class="wb-fval">{{ conflictLevelLabel(selectedEvent.conflictLevel) }}</span></div>
         <div class="wb-frow"><span class="wb-flabel">情绪</span><span class="wb-fval">{{ selectedEvent.emotionTone }}</span></div>
         <div class="wb-frow"><span class="wb-flabel">地点</span><span class="wb-fval">{{ selectedEvent.location }}</span></div>
         <div class="wb-frow"><span class="wb-flabel">人物</span><span class="wb-fval">{{ selectedEvent.characters.join('、') }}</span></div>
