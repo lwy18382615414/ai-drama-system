@@ -14,6 +14,7 @@ import {
   storyboards,
 } from '../../../packages/database/index.js'
 import { MockStructuredTextProvider } from '../../../packages/providers/index.js'
+import { startTestWorker } from '../test-helpers/task-worker.js'
 import { createProjectRoutes } from './project.js'
 
 interface ApiResponse<T> {
@@ -31,8 +32,9 @@ async function createTestApp() {
     genre: '复仇',
     visualStyle: '现代都市，冷色调电影感灯光。',
   }))
+  const worker = startTestWorker(db, { provider })
   const app = new Hono()
-  app.route('/', createProjectRoutes({ db, provider }))
+  app.route('/', createProjectRoutes({ db, provider, scheduler: worker }))
   return { app, db }
 }
 

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { fail, internalError, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   ChapterImportServiceError,
@@ -25,6 +26,7 @@ import {
 export interface ProjectRouteDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export function createProjectRoutes(deps: ProjectRouteDeps) {
@@ -96,7 +98,10 @@ export function createProjectRoutes(deps: ProjectRouteDeps) {
     }
 
     try {
-      const result = await createProjectFromNovel({ db: deps.db, provider: deps.provider }, parsed.data)
+      const result = await createProjectFromNovel(
+        { db: deps.db, provider: deps.provider, scheduler: deps.scheduler },
+        parsed.data,
+      )
       return ok(c, result, 201)
     } catch (error) {
       return handleServiceError(c, error)

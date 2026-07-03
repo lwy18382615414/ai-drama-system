@@ -17,6 +17,7 @@ import {
   type DatabaseClient,
 } from '../../../packages/database/index.js'
 import { MockImageProvider, type ImageGenerationRequest } from '../../../packages/providers/index.js'
+import { startTestWorker } from '../test-helpers/task-worker.js'
 import { createImageGenerationRoutes } from './image-generation.js'
 
 interface BatchResultBody {
@@ -190,8 +191,9 @@ async function createTestApp(
   const imageProvider = new MockImageProvider(
     responseFactory ?? ((request) => `/static/mock-images/${String(request.metadata?.targetId)}.png`),
   )
+  const worker = startTestWorker(db, { imageProvider })
   const app = new Hono()
-  app.route('/', createImageGenerationRoutes({ db, imageProvider }))
+  app.route('/', createImageGenerationRoutes({ db, imageProvider, scheduler: worker }))
 
   return { app, db }
 }

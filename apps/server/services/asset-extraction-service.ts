@@ -16,11 +16,11 @@ import {
 } from '../../../packages/database/index.js'
 import {
   ExtractAgentOptionsSchema,
-  runExtractAgent,
   type ExtractAgentInput,
 } from '../../../packages/agents/extract-agent/index.js'
 import { ScriptAgentOutputSchema } from '../../../packages/agents/script-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 
 export const StartAssetExtractionRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -41,6 +41,7 @@ export class AssetExtractionServiceError extends Error {
 export interface AssetExtractionServiceDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export async function startAssetExtraction(
@@ -71,16 +72,7 @@ export async function startAssetExtraction(
     updatedAt: now,
   })
 
-  setTimeout(() => {
-    void runExtractAgent({
-      db: deps.db,
-      provider: deps.provider,
-      input: {
-        ...input,
-        taskId,
-      },
-    })
-  }, 0)
+  deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }
 }

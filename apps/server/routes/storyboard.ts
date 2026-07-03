@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { z } from 'zod/v4'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { fail, internalError, invalidQuery, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   getEpisodeStoryboards,
@@ -17,6 +18,7 @@ import {
 export interface StoryboardRouteDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export function createStoryboardRoutes(deps: StoryboardRouteDeps) {

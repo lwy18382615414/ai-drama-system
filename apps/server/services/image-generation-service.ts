@@ -15,6 +15,7 @@ import {
   storyboards,
 } from '../../../packages/database/index.js'
 import type { ImageGenerationRequest, ImageProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 
 export const ImageTargetTypeSchema = z.enum([
   'character_reference_image',
@@ -116,6 +117,9 @@ export class ImageGenerationServiceError extends Error {
 export interface ImageGenerationServiceDeps {
   db: DatabaseClient
   imageProvider: ImageProvider
+  // Present on the single-target async path (start*); the inline batch paths execute directly
+  // and don't need the worker, so it's optional here.
+  scheduler?: TaskScheduler
 }
 
 interface ResolvedImageTarget {
@@ -244,17 +248,7 @@ export async function startImageGeneration(
     storyboardId: target.storyboardId ?? null,
   })
 
-  setTimeout(() => {
-    void executeImageGeneration(deps, {
-      taskId,
-      projectId,
-      targetType: target.targetType,
-      targetId: target.targetId,
-      prompt: target.prompt,
-      options: request.options ?? {},
-      force: request.force ?? false,
-    })
-  }, 0)
+  deps.scheduler?.notify()
 
   return { taskId, status: 'pending' as const }
 }
@@ -270,10 +264,15 @@ async function insertPendingImageTask(
     force?: boolean
     episodeId?: string | null
     storyboardId?: string | null
+    // Batch paths execute inline right after inserting, so they seed the row as 'running' to
+    // keep the worker (which only claims 'pending') from racing them. The single async path
+    // leaves it 'pending' for the worker to claim.
+    status?: 'pending' | 'running'
   },
 ): Promise<string> {
   const now = new Date().toISOString()
   const taskId = nanoid()
+  const status = params.status ?? 'pending'
   const input = {
     projectId: params.projectId,
     targetType: params.targetType,
@@ -296,7 +295,7 @@ async function insertPendingImageTask(
     model: deps.imageProvider.model,
     inputJson: JSON.stringify(input),
     outputJson: null,
-    status: 'pending',
+    status,
     retryCount: 0,
     errorMessage: null,
     startedAt: null,
@@ -384,6 +383,7 @@ async function generateOneTarget(
     force: params.force,
     episodeId: params.episodeId ?? null,
     storyboardId: params.storyboardId ?? null,
+    status: 'running',
   })
 
   const outcome = await executeImageGeneration(deps, {

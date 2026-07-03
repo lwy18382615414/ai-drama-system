@@ -9,6 +9,7 @@ import {
   type StructuredTextProvider,
 } from '../../packages/providers/index.js'
 import { internalError, ok } from './api-response.js'
+import { createTaskWorker } from './tasks.js'
 
 const STATIC_DIR = process.env.STATIC_DIR ?? 'data/static'
 const STATIC_URL_BASE = '/static'
@@ -27,6 +28,13 @@ export async function createApp() {
 
   const provider = createTextProvider()
   const imageProvider = createImageProvider()
+
+  // Database-backed task worker replaces in-request fire-and-forget: start* handlers only
+  // enqueue a generation_tasks row and notify(); the worker claims, runs, retries, and
+  // recovers pending/interrupted tasks on startup.
+  const worker = createTaskWorker({ db, provider, imageProvider })
+  worker.start()
+
   const app = new Hono()
 
   // Permissive CORS for the workbench frontend dev server (separate origin in MVP).
@@ -45,15 +53,15 @@ export async function createApp() {
 
   app.get('/health', (c) => ok(c, { ok: true }))
   app.route('/', createNovelRoutes())
-  app.route('/', createProjectRoutes({ db, provider }))
-  app.route('/api/agents/event', createEventAgentRoutes({ db, provider }))
-  app.route('/', createEpisodePlannerRoutes({ db, provider }))
-  app.route('/', createScriptRoutes({ db, provider }))
-  app.route('/', createAssetRoutes({ db, provider }))
-  app.route('/', createStoryboardRoutes({ db, provider }))
-  app.route('/', createImageGenerationRoutes({ db, imageProvider }))
+  app.route('/', createProjectRoutes({ db, provider, scheduler: worker }))
+  app.route('/api/agents/event', createEventAgentRoutes({ db, provider, scheduler: worker }))
+  app.route('/', createEpisodePlannerRoutes({ db, provider, scheduler: worker }))
+  app.route('/', createScriptRoutes({ db, provider, scheduler: worker }))
+  app.route('/', createAssetRoutes({ db, provider, scheduler: worker }))
+  app.route('/', createStoryboardRoutes({ db, provider, scheduler: worker }))
+  app.route('/', createImageGenerationRoutes({ db, imageProvider, scheduler: worker }))
 
-  return { app, db }
+  return { app, db, worker }
 }
 
 function createTextProvider(): StructuredTextProvider {

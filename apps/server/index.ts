@@ -3,7 +3,7 @@ import { closeDatabase } from '../../packages/database/index.js'
 import { createApp } from './app.js'
 
 const port = Number(process.env.PORT ?? 3000)
-const { app, db } = await createApp()
+const { app, db, worker } = await createApp()
 
 const server = serve({
   fetch: app.fetch,
@@ -18,6 +18,7 @@ function shutdown(signal: string) {
   shuttingDown = true
   console.log(`Received ${signal}, shutting down...`)
   server.close(() => {
+    worker.stop()
     closeDatabase(db)
     process.exit(0)
   })

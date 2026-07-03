@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { invalidRequestBody, notFound, ok } from '../api-response.js'
 import {
   getChapterEvents,
@@ -12,6 +13,7 @@ import {
 export interface EventAgentRouteDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export function createEventAgentRoutes(deps: EventAgentRouteDeps) {

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:server": "tsx --env-file-if-exists=.env apps/server/index.ts",
+    "db:generate": "drizzle-kit generate",
     "smoke:text-provider": "tsx --env-file-if-exists=.env scripts/smoke-test-text-provider.ts",
     "smoke:image-provider": "tsx --env-file-if-exists=.env scripts/smoke-test-image-provider.ts",
     "test": "vitest run",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^22.13.0",
+    "drizzle-kit": "^0.31.10",
     "jszip": "^3.10.1",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
