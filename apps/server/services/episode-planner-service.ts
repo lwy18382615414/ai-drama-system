@@ -13,9 +13,9 @@ import {
 import {
   EpisodePlannerOptionsSchema,
   type EpisodePlannerInput,
-  runEpisodePlannerAgent,
 } from '../../../packages/agents/episode-planner-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 
 export const StartEpisodePlanningRequestSchema = z
   .object({
@@ -42,6 +42,7 @@ export class EpisodePlannerServiceError extends Error {
 export interface EpisodePlannerServiceDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export async function startEpisodePlanning(
@@ -72,16 +73,7 @@ export async function startEpisodePlanning(
     updatedAt: now,
   })
 
-  setTimeout(() => {
-    void runEpisodePlannerAgent({
-      db: deps.db,
-      provider: deps.provider,
-      input: {
-        ...input,
-        taskId,
-      },
-    })
-  }, 0)
+  deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }
 }

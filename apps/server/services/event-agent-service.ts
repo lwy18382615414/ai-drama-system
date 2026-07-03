@@ -3,9 +3,9 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod/v4'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import { generationTasks, novelEvents } from '../../../packages/database/index.js'
-import { runEventAgent } from '../../../packages/agents/event-agent/index.js'
 import { EventAgentOptionsSchema } from '../../../packages/agents/event-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 
 export const StartEventExtractionRequestSchema = z.object({
   projectId: z.string().min(1),
@@ -18,6 +18,7 @@ export type StartEventExtractionRequest = z.infer<typeof StartEventExtractionReq
 export interface EventAgentServiceDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export async function startEventExtraction(
@@ -47,17 +48,7 @@ export async function startEventExtraction(
     updatedAt: now,
   })
 
-  setTimeout(() => {
-    void runEventAgent({
-      db: deps.db,
-      provider: deps.provider,
-      input: {
-        ...input,
-        taskId,
-        options: input.options,
-      },
-    })
-  }, 0)
+  deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }
 }

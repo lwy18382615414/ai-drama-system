@@ -15,6 +15,7 @@ import {
   type DatabaseClient,
 } from '../../../packages/database/index.js'
 import { MockImageProvider, MockStructuredTextProvider } from '../../../packages/providers/index.js'
+import { startTestWorker } from '../test-helpers/task-worker.js'
 import { createImageGenerationRoutes } from './image-generation.js'
 import { createStoryboardRoutes } from './storyboard.js'
 
@@ -130,9 +131,10 @@ async function createTestApp(imageUrl = '/static/mock-images/storyboard-route.pn
 
   const provider = new MockStructuredTextProvider()
   const imageProvider = new MockImageProvider(() => imageUrl)
+  const worker = startTestWorker(db, { provider, imageProvider })
   const app = new Hono()
-  app.route('/', createStoryboardRoutes({ db, provider }))
-  app.route('/', createImageGenerationRoutes({ db, imageProvider }))
+  app.route('/', createStoryboardRoutes({ db, provider, scheduler: worker }))
+  app.route('/', createImageGenerationRoutes({ db, imageProvider, scheduler: worker }))
 
   return { app, db }
 }

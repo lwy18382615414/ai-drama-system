@@ -4,7 +4,6 @@ import { z } from 'zod/v4'
 import {
   NovelMetaSchema,
   ProjectProfileAgentOptionsSchema,
-  runProjectProfileAgent,
 } from '../../../packages/agents/index.js'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import {
@@ -26,6 +25,7 @@ import {
   storyboards,
 } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { countWords } from './novel-splitter.js'
 
 export class ProjectServiceError extends Error {
@@ -343,6 +343,7 @@ export type CreateProjectFromNovelRequest = z.infer<typeof CreateProjectFromNove
 export interface CreateProjectFromNovelDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 /**
@@ -412,13 +413,7 @@ export async function createProjectFromNovel(deps: CreateProjectFromNovelDeps, r
     })
   })
 
-  setTimeout(() => {
-    void runProjectProfileAgent({
-      db: deps.db,
-      provider: deps.provider,
-      input: agentInput,
-    })
-  }, 0)
+  deps.scheduler.notify()
 
   return { project, chapters: chapterRows, taskId, taskStatus: 'pending' as const }
 }

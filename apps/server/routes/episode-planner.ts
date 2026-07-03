@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { fail, internalError, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
 import {
   EpisodePlannerServiceError,
@@ -14,6 +15,7 @@ import {
 export interface EpisodePlannerRouteDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export function createEpisodePlannerRoutes(deps: EpisodePlannerRouteDeps) {

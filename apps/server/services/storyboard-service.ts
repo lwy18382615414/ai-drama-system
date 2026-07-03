@@ -3,7 +3,6 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod/v4'
 import {
   StoryboardAgentOptionsSchema,
-  runStoryboardAgent,
   StoryboardDialogueSchema,
   type StoryboardAgentInput,
 } from '../../../packages/agents/storyboard-agent/index.js'
@@ -23,6 +22,7 @@ import {
 } from '../../../packages/database/index.js'
 import { ScriptAgentOutputSchema } from '../../../packages/agents/script-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 
 export const StartStoryboardGenerationRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -69,6 +69,7 @@ export class StoryboardServiceError extends Error {
 export interface StoryboardServiceDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export async function startStoryboardGeneration(
@@ -99,16 +100,7 @@ export async function startStoryboardGeneration(
     updatedAt: now,
   })
 
-  setTimeout(() => {
-    void runStoryboardAgent({
-      db: deps.db,
-      provider: deps.provider,
-      input: {
-        ...input,
-        taskId,
-      },
-    })
-  }, 0)
+  deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }
 }

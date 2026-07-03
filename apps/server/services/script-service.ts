@@ -12,12 +12,12 @@ import {
 } from '../../../packages/database/index.js'
 import {
   renderScriptContent,
-  runScriptAgent,
   ScriptAgentOptionsSchema,
   ScriptAgentOutputSchema,
   type ScriptAgentInput,
 } from '../../../packages/agents/script-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
+import type { TaskScheduler } from '../../../packages/tasks/index.js'
 
 export const StartScriptGenerationRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -49,6 +49,7 @@ export class ScriptServiceError extends Error {
 export interface ScriptServiceDeps {
   db: DatabaseClient
   provider: StructuredTextProvider
+  scheduler: TaskScheduler
 }
 
 export async function startScriptGeneration(
@@ -79,16 +80,7 @@ export async function startScriptGeneration(
     updatedAt: now,
   })
 
-  setTimeout(() => {
-    void runScriptAgent({
-      db: deps.db,
-      provider: deps.provider,
-      input: {
-        ...input,
-        taskId,
-      },
-    })
-  }, 0)
+  deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }
 }

@@ -12,7 +12,12 @@ import {
   storyboards,
   type DatabaseClient,
 } from '../../../packages/database/index.js'
-import { MockImageProvider, type ImageGenerationRequest } from '../../../packages/providers/index.js'
+import {
+  MockImageProvider,
+  type ImageGenerationRequest,
+  type ImageProvider,
+} from '../../../packages/providers/index.js'
+import { startTestWorker } from '../test-helpers/task-worker.js'
 import {
   ImageGenerationServiceError,
   startCharacterReferenceImageGeneration,
@@ -26,6 +31,15 @@ async function createTestDb() {
   return db
 }
 
+/**
+ * Builds service deps whose worker shares the given imageProvider, so the async start* paths are
+ * actually driven to completion (the worker's image handler uses this exact provider instance).
+ */
+function imageDeps(db: DatabaseClient, imageProvider: ImageProvider) {
+  const worker = startTestWorker(db, { imageProvider })
+  return { db, imageProvider, scheduler: worker }
+}
+
 describe('image-generation-service', () => {
   it('generates a character reference image asset', async () => {
     const db = await createTestDb()
@@ -33,13 +47,13 @@ describe('image-generation-service', () => {
     let providerRequest: ImageGenerationRequest | undefined
 
     const result = await startImageGeneration(
-      {
+      imageDeps(
         db,
-        imageProvider: new MockImageProvider((request) => {
+        new MockImageProvider((request) => {
           providerRequest = request
           return '/static/mock-images/character.png'
         }),
-      },
+      ),
       'project-1',
       {
         target_type: 'character_reference_image',
@@ -74,7 +88,7 @@ describe('image-generation-service', () => {
     await seedImageGenerationContext(db)
 
     const result = await startImageGeneration(
-      { db, imageProvider: new MockImageProvider(() => '/static/mock-images/scene.png') },
+      imageDeps(db, new MockImageProvider(() => '/static/mock-images/scene.png')),
       'project-1',
       {
         target_type: 'scene_reference_image',
@@ -94,13 +108,13 @@ describe('image-generation-service', () => {
     let providerRequest: ImageGenerationRequest | undefined
 
     const result = await startSceneReferenceImageGeneration(
-      {
+      imageDeps(
         db,
-        imageProvider: new MockImageProvider((request) => {
+        new MockImageProvider((request) => {
           providerRequest = request
           return '/static/mock-images/scene.png'
         }),
-      },
+      ),
       'scene-1',
       {},
     )
@@ -135,7 +149,7 @@ describe('image-generation-service', () => {
 
     await expect(
       startSceneReferenceImageGeneration(
-        { db, imageProvider: new MockImageProvider(() => '/static/mock-images/scene.png') },
+        imageDeps(db, new MockImageProvider(() => '/static/mock-images/scene.png')),
         'scene-1',
         {},
       ),
@@ -170,7 +184,7 @@ describe('image-generation-service', () => {
     })
 
     const result = await startSceneReferenceImageGeneration(
-      { db, imageProvider: new MockImageProvider(() => '/static/mock-images/regenerated-scene.png') },
+      imageDeps(db, new MockImageProvider(() => '/static/mock-images/regenerated-scene.png')),
       'scene-1',
       { force: true },
     )
@@ -194,12 +208,12 @@ describe('image-generation-service', () => {
     await seedImageGenerationContext(db)
 
     const result = await startSceneReferenceImageGeneration(
-      {
+      imageDeps(
         db,
-        imageProvider: new MockImageProvider(() => {
+        new MockImageProvider(() => {
           throw new Error('mock scene provider failed')
         }),
-      },
+      ),
       'scene-1',
       {},
     )
@@ -215,7 +229,7 @@ describe('image-generation-service', () => {
 
     await expect(
       startSceneReferenceImageGeneration(
-        { db, imageProvider: new MockImageProvider(() => '/static/mock-images/scene.png') },
+        imageDeps(db, new MockImageProvider(() => '/static/mock-images/scene.png')),
         'missing-scene',
         {},
       ),
@@ -227,7 +241,7 @@ describe('image-generation-service', () => {
     await seedImageGenerationContext(db)
 
     const result = await startImageGeneration(
-      { db, imageProvider: new MockImageProvider(() => '/static/mock-images/storyboard.png') },
+      imageDeps(db, new MockImageProvider(() => '/static/mock-images/storyboard.png')),
       'project-1',
       {
         target_type: 'storyboard_first_frame',
@@ -246,7 +260,7 @@ describe('image-generation-service', () => {
     await seedImageGenerationContext(db)
 
     await expect(
-      startImageGeneration({ db, imageProvider: new MockImageProvider() }, 'project-1', {
+      startImageGeneration(imageDeps(db, new MockImageProvider()), 'project-1', {
         target_type: 'character_reference_image',
         target_id: 'missing-character',
       }),
@@ -262,7 +276,7 @@ describe('image-generation-service', () => {
       .where(eq(characters.id, 'character-1'))
 
     await expect(
-      startImageGeneration({ db, imageProvider: new MockImageProvider() }, 'project-1', {
+      startImageGeneration(imageDeps(db, new MockImageProvider()), 'project-1', {
         target_type: 'character_reference_image',
         target_id: 'character-1',
       }),
@@ -274,7 +288,7 @@ describe('image-generation-service', () => {
     await seedImageGenerationContext(db)
 
     const result = await startCharacterReferenceImageGeneration(
-      { db, imageProvider: new MockImageProvider(() => '/static/mock-images/character-route.png') },
+      imageDeps(db, new MockImageProvider(() => '/static/mock-images/character-route.png')),
       'character-1',
       {},
     )
@@ -317,7 +331,7 @@ describe('image-generation-service', () => {
     })
 
     const result = await startCharacterReferenceImageGeneration(
-      { db, imageProvider: new MockImageProvider(() => '/static/mock-images/regenerated.png') },
+      imageDeps(db, new MockImageProvider(() => '/static/mock-images/regenerated.png')),
       'character-1',
       { force: true },
     )
@@ -341,12 +355,12 @@ describe('image-generation-service', () => {
     await seedImageGenerationContext(db)
 
     const result = await startCharacterReferenceImageGeneration(
-      {
+      imageDeps(
         db,
-        imageProvider: new MockImageProvider(() => {
+        new MockImageProvider(() => {
           throw new Error('mock provider failed')
         }),
-      },
+      ),
       'character-1',
       {},
     )
