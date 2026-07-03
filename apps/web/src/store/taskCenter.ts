@@ -8,6 +8,10 @@ export interface TrackedTask {
   label: string
   /** Free-form grouping key (e.g. a chapterId or episodeId) so UI can ask "is *this* thing busy". */
   scope?: string
+  /** Free-form task category (e.g. 'event_extraction') so UI can ask "is any X running right now". */
+  kind?: string
+  /** Project this task belongs to, so the project list can show a per-project running count. */
+  projectId?: string
   status: TrackedTaskStatus
   errorMessage: string | null
   createdAt: string
@@ -27,6 +31,8 @@ function normalizeStatus(status: string): TrackedTaskStatus {
 export interface RegisterTaskOptions {
   label: string
   scope?: string
+  kind?: string
+  projectId?: string
   onDone?: () => void
   onFailed?: (message: string | null) => void
 }
@@ -39,6 +45,8 @@ function register(taskId: string, opts: RegisterTaskOptions) {
     id: taskId,
     label: opts.label,
     scope: opts.scope,
+    kind: opts.kind,
+    projectId: opts.projectId,
     status: 'pending',
     errorMessage: null,
     createdAt: new Date().toISOString(),
@@ -90,9 +98,33 @@ const runningCount = computed(
   () => list.value.filter((t) => t.status === 'pending' || t.status === 'running').length,
 )
 
+/** Running-task count for one project — only reflects tasks started this session (there's no server-side "list tasks" endpoint). */
+function runningCountFor(projectId: string): number {
+  return list.value.filter(
+    (t) => t.projectId === projectId && (t.status === 'pending' || t.status === 'running'),
+  ).length
+}
+
 function isScopeBusy(scope: string): boolean {
   return list.value.some(
     (t) => t.scope === scope && (t.status === 'pending' || t.status === 'running'),
+  )
+}
+
+/** True if a task with this exact scope *and* kind is in flight (e.g. "is asset extraction running for episode X"). */
+function isTaskBusy(scope: string, kind: string): boolean {
+  return list.value.some(
+    (t) => t.scope === scope && t.kind === kind && (t.status === 'pending' || t.status === 'running'),
+  )
+}
+
+/** True if any task of this kind is in flight, optionally excluding one scope (e.g. "any *other* chapter extracting"). */
+function isKindBusy(kind: string, excludeScope?: string): boolean {
+  return list.value.some(
+    (t) =>
+      t.kind === kind &&
+      t.scope !== excludeScope &&
+      (t.status === 'pending' || t.status === 'running'),
   )
 }
 
@@ -100,6 +132,26 @@ function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
 }
 
+/** Removes finished (completed/failed) tasks matching scope+kind — used before a retry so the stale failure doesn't linger. */
+function dismiss(scope: string, kind: string) {
+  for (const [id, task] of tasks) {
+    if (task.scope === scope && task.kind === kind && task.status !== 'pending' && task.status !== 'running') {
+      tasks.delete(id)
+    }
+  }
+}
+
 export function useTaskCenter() {
-  return { tasks: list, runningCount, drawerOpen, toggleDrawer, register, isScopeBusy }
+  return {
+    tasks: list,
+    runningCount,
+    runningCountFor,
+    drawerOpen,
+    toggleDrawer,
+    register,
+    isScopeBusy,
+    isKindBusy,
+    isTaskBusy,
+    dismiss,
+  }
 }
