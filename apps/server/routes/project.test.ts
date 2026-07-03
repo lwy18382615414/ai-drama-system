@@ -187,7 +187,14 @@ describe('project routes', () => {
     expect(listEnvelope.code).toBe(0)
     const listBody = listEnvelope.data
     expect(listBody.projects).toHaveLength(1)
-    expect(listBody.projects[0]).toMatchObject({ episodeCount: 1, storyboardCount: 1, imageCompletion: 50 })
+    expect(listBody.projects[0]).toMatchObject({
+      chapterCount: 1,
+      episodeCount: 1,
+      scriptCount: 0,
+      storyboardCount: 1,
+      storyboardEpisodeCount: 1,
+      imageCompletion: 50,
+    })
 
     const detailResponse = await app.request(`/api/projects/${created.project.id}`)
     expect(detailResponse.status).toBe(200)

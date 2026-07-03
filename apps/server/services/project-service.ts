@@ -83,7 +83,7 @@ async function groupedCounts(
 
 async function countByTable(
   db: DatabaseClient,
-  table: typeof episodes | typeof storyboards | typeof characters | typeof scenes,
+  table: typeof episodes | typeof storyboards | typeof characters | typeof scenes | typeof novelChapters | typeof scripts,
   projectIds: string[],
 ) {
   if (projectIds.length === 0) return new Map<string, number>()
@@ -107,8 +107,12 @@ export interface ProjectSummary {
   status: string
   createdAt: string
   updatedAt: string
+  chapterCount: number
   episodeCount: number
+  scriptCount: number
   storyboardCount: number
+  /** Number of distinct episodes that have at least one storyboard shot — the "分镜" stage denominator. */
+  storyboardEpisodeCount: number
   characterCount: number
   sceneCount: number
   imageCompletion: number
@@ -118,9 +122,29 @@ export async function listProjects(db: DatabaseClient): Promise<ProjectSummary[]
   const rows = await db.select().from(projects).orderBy(sql`${projects.createdAt} desc`)
   const ids = rows.map((project) => project.id)
 
-  const [episodeCounts, storyboardCounts, characterCounts, sceneCounts, imageCounts] = await Promise.all([
+  const [
+    chapterCounts,
+    episodeCounts,
+    scriptCounts,
+    storyboardCounts,
+    storyboardEpisodeCounts,
+    characterCounts,
+    sceneCounts,
+    imageCounts,
+  ] = await Promise.all([
+    countByTable(db, novelChapters, ids),
     countByTable(db, episodes, ids),
+    countByTable(db, scripts, ids),
     countByTable(db, storyboards, ids),
+    ids.length === 0
+      ? Promise.resolve(new Map<string, number>())
+      : groupedCounts(() =>
+          db
+            .select({ projectId: storyboards.projectId, count: sql<number>`count(distinct ${storyboards.episodeId})` })
+            .from(storyboards)
+            .where(inArray(storyboards.projectId, ids))
+            .groupBy(storyboards.projectId),
+        ),
     countByTable(db, characters, ids),
     countByTable(db, scenes, ids),
     ids.length === 0
@@ -135,16 +159,22 @@ export async function listProjects(db: DatabaseClient): Promise<ProjectSummary[]
   ])
 
   return rows.map((project) => {
+    const chapterCount = chapterCounts.get(project.id) ?? 0
     const episodeCount = episodeCounts.get(project.id) ?? 0
+    const scriptCount = scriptCounts.get(project.id) ?? 0
     const storyboardCount = storyboardCounts.get(project.id) ?? 0
+    const storyboardEpisodeCount = storyboardEpisodeCounts.get(project.id) ?? 0
     const characterCount = characterCounts.get(project.id) ?? 0
     const sceneCount = sceneCounts.get(project.id) ?? 0
     const completedImages = imageCounts.get(project.id) ?? 0
 
     return {
       ...project,
+      chapterCount,
       episodeCount,
+      scriptCount,
       storyboardCount,
+      storyboardEpisodeCount,
       characterCount,
       sceneCount,
       imageCompletion: imageCompletion(completedImages, characterCount, sceneCount, storyboardCount),
@@ -153,10 +183,8 @@ export async function listProjects(db: DatabaseClient): Promise<ProjectSummary[]
 }
 
 export interface ProjectDetail extends ProjectSummary {
-  chapterCount: number
   eventCount: number
   propCount: number
-  scriptCount: number
   completedImages: number
 }
 
@@ -190,6 +218,7 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     sceneCount,
     propCount,
     storyboardCount,
+    storyboardEpisodeCount,
     scriptCount,
     completedImages,
   ] = await Promise.all([
@@ -237,6 +266,12 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     ),
     countFor(() =>
       db
+        .select({ count: sql<number>`count(distinct ${storyboards.episodeId})` })
+        .from(storyboards)
+        .where(eq(storyboards.projectId, projectId)),
+    ),
+    countFor(() =>
+      db
         .select({ count: sql<number>`count(*)` })
         .from(scripts)
         .where(eq(scripts.projectId, projectId)),
@@ -258,6 +293,7 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     sceneCount,
     propCount,
     storyboardCount,
+    storyboardEpisodeCount,
     scriptCount,
     completedImages,
     imageCompletion: imageCompletion(completedImages, characterCount, sceneCount, storyboardCount),

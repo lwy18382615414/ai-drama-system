@@ -81,6 +81,44 @@ export async function getStoryboard(storyboardId: string): Promise<Storyboard> {
   return data.storyboard
 }
 
+export async function generateStoryboardFirstFrame(
+  storyboardId: string,
+  opts?: { force?: boolean },
+): Promise<{ taskId: string; status: string }> {
+  const { data } = await apiClient.post<{ taskId: string; status: string }>(
+    `/storyboards/${storyboardId}/generate-first-frame`,
+    { force: opts?.force },
+  )
+  return data
+}
+
+export interface BatchImageGenerationSummary {
+  total: number
+  completed: number
+  skipped: number
+  failed: number
+}
+
+export interface BatchImageGenerationResult {
+  episodeId: string
+  targetType: string
+  summary: BatchImageGenerationSummary
+  results: Array<{ targetId: string; status: 'completed' | 'skipped' | 'failed'; taskId?: string; imageUrl?: string; error?: string }>
+}
+
+/** Batch-generates first-frame images for every storyboard in the episode that's missing one (awaits completion server-side). */
+export async function generateEpisodeStoryboardFirstFrames(
+  episodeId: string,
+  opts?: { force?: boolean },
+): Promise<BatchImageGenerationResult> {
+  const { data } = await apiClient.post<BatchImageGenerationResult>(
+    `/episodes/${episodeId}/generate-storyboard-first-frames`,
+    { force: opts?.force },
+    { timeout: 180_000 },
+  )
+  return data
+}
+
 export async function updateStoryboard(storyboardId: string, patch: PatchStoryboardInput): Promise<Storyboard> {
   const body = {
     shot_no: patch.shotNo,

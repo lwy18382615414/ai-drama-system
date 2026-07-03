@@ -11,18 +11,19 @@ export interface ProjectSummary {
   status: string
   createdAt: string
   updatedAt: string
+  chapterCount: number
   episodeCount: number
+  scriptCount: number
   storyboardCount: number
+  storyboardEpisodeCount: number
   characterCount: number
   sceneCount: number
   imageCompletion: number
 }
 
 export interface ProjectDetail extends ProjectSummary {
-  chapterCount: number
   eventCount: number
   propCount: number
-  scriptCount: number
   completedImages: number
 }
 
