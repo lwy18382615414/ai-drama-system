@@ -86,3 +86,37 @@ export async function listProjectProps(projectId: string): Promise<Prop[]> {
   );
   return data.props;
 }
+
+export interface EpisodeAssets {
+  episode: { id: string; projectId: string };
+  characters: Character[];
+  scenes: Scene[];
+  props: Prop[];
+}
+
+/** Assets already linked to an episode — used to tell whether extraction has run yet. */
+export async function getEpisodeAssets(episodeId: string): Promise<EpisodeAssets> {
+  const { data } = await apiClient.get<{
+    episode: { id: string; projectId: string };
+    characters: Array<{ character: Character }>;
+    scenes: Array<{ scene: Scene }>;
+    props: Array<{ prop: Prop }>;
+  }>(`/episodes/${episodeId}/assets`);
+  return {
+    episode: data.episode,
+    characters: data.characters.map((row) => row.character),
+    scenes: data.scenes.map((row) => row.scene),
+    props: data.props.map((row) => row.prop),
+  };
+}
+
+export async function generateSceneImage(
+  sceneId: string,
+  opts?: { force?: boolean },
+): Promise<{ taskId: string; status: string }> {
+  const { data } = await apiClient.post<{ taskId: string; status: string }>(
+    `/scenes/${sceneId}/generate-image`,
+    { force: opts?.force },
+  );
+  return data;
+}
