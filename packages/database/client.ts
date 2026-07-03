@@ -1,43 +1,73 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { drizzle } from 'drizzle-orm/sql-js'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { createClient } from '@libsql/client'
+import { drizzle } from 'drizzle-orm/libsql'
 import { sql } from 'drizzle-orm'
-import initSqlJs, { type Database as SqlJsDatabase } from 'sql.js'
 import { schema } from './schema.js'
 
 export type DatabaseClient = Awaited<ReturnType<typeof createDatabase>>
 
+// libSQL recreates its connection after every transaction; for a real ":memory:" database
+// that means each transaction lands in a fresh, empty DB. We therefore back ":memory:" with a
+// unique temp file per call — same ephemeral, isolated semantics, minus the connection quirk.
+const ephemeralDirs = new Map<object, string>()
+let exitCleanupRegistered = false
+
 export async function createDatabase(filename = 'data/ai-drama.sqlite') {
-  const SQL = await initSqlJs()
-  let sqlite: SqlJsDatabase
+  const resolved = resolveDatabaseUrl(filename)
+  const client = createClient({ url: resolved.url })
+  const db = drizzle(client, { schema })
 
-  if (filename === ':memory:') {
-    sqlite = new SQL.Database()
-  } else {
-    mkdirSync(dirname(filename), { recursive: true })
+  // libSQL enables foreign keys per connection; WAL gives durable, concurrent-read local files.
+  await db.run(sql`PRAGMA foreign_keys = ON`)
+  await db.run(sql`PRAGMA journal_mode = WAL`)
 
-    try {
-      sqlite = new SQL.Database(readFileSync(filename))
-    } catch {
-      sqlite = new SQL.Database()
-    }
+  if (resolved.ephemeralDir) {
+    ephemeralDirs.set(db, resolved.ephemeralDir)
+    registerExitCleanup()
   }
 
-  sqlite.run('PRAGMA foreign_keys = ON')
-
-  return drizzle(sqlite, { schema })
+  return db
 }
 
-export function persistDatabase(db: DatabaseClient, filename = 'data/ai-drama.sqlite') {
-  if (filename === ':memory:') return
+/** Closes the underlying libSQL connection and removes any temp files backing a ":memory:" database. */
+export function closeDatabase(db: DatabaseClient) {
+  db.$client.close()
+
+  const dir = ephemeralDirs.get(db)
+  if (dir) {
+    rmSync(dir, { recursive: true, force: true })
+    ephemeralDirs.delete(db)
+  }
+}
+
+function resolveDatabaseUrl(filename: string): { url: string; ephemeralDir?: string } {
+  if (filename === ':memory:') {
+    const ephemeralDir = mkdtempSync(join(tmpdir(), 'ai-drama-mem-'))
+    return { url: `file:${join(ephemeralDir, 'mem.sqlite')}`, ephemeralDir }
+  }
 
   mkdirSync(dirname(filename), { recursive: true })
-  const sqlite = (db as unknown as { session: { client: SqlJsDatabase } }).session.client
-  writeFileSync(filename, Buffer.from(sqlite.export()))
+  return { url: `file:${filename}` }
 }
 
-export function initializeDatabase(db: DatabaseClient) {
-  db.run(sql`
+function registerExitCleanup() {
+  if (exitCleanupRegistered) return
+  exitCleanupRegistered = true
+  process.on('exit', () => {
+    for (const dir of ephemeralDirs.values()) {
+      try {
+        rmSync(dir, { recursive: true, force: true })
+      } catch {
+        // Best-effort cleanup of ephemeral ":memory:" temp files.
+      }
+    }
+  })
+}
+
+export async function initializeDatabase(db: DatabaseClient): Promise<void> {
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -52,7 +82,7 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS episodes (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -69,10 +99,10 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE episodes ADD COLUMN opening_hook TEXT`)
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE episodes ADD COLUMN ending_hook TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE episodes ADD COLUMN opening_hook TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE episodes ADD COLUMN ending_hook TEXT`)
 
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(
     db,
     sql`
       CREATE UNIQUE INDEX IF NOT EXISTS episodes_project_episode_no_unique
@@ -80,7 +110,7 @@ export function initializeDatabase(db: DatabaseClient) {
     `,
   )
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS scripts (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -97,10 +127,10 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE scripts ADD COLUMN opening_hook TEXT`)
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE scripts ADD COLUMN ending_hook TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE scripts ADD COLUMN opening_hook TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE scripts ADD COLUMN ending_hook TEXT`)
 
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(
     db,
     sql`
       CREATE UNIQUE INDEX IF NOT EXISTS scripts_episode_id_unique
@@ -108,7 +138,7 @@ export function initializeDatabase(db: DatabaseClient) {
     `,
   )
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS novel_chapters (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -123,7 +153,7 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS novel_events (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -144,12 +174,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS novel_events_chapter_event_no_unique
       ON novel_events(chapter_id, event_no)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS episode_event_links (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -162,29 +192,29 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE episode_event_links ADD COLUMN novel_event_id TEXT REFERENCES novel_events(id)`)
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE episode_event_links ADD COLUMN order_in_episode INTEGER`)
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE episode_event_links ADD COLUMN novel_event_id TEXT REFERENCES novel_events(id)`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE episode_event_links ADD COLUMN order_in_episode INTEGER`)
+  await runOptionalSchemaUpdate(
     db,
     sql`ALTER TABLE episode_event_links ADD COLUMN usage_type TEXT NOT NULL DEFAULT 'primary'`,
   )
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(
     db,
     sql`UPDATE episode_event_links SET novel_event_id = event_id WHERE novel_event_id IS NULL AND event_id IS NOT NULL`,
   )
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(
     db,
     sql`UPDATE episode_event_links SET order_in_episode = order_no WHERE order_in_episode IS NULL AND order_no IS NOT NULL`,
   )
 
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(
     db,
     sql`
       CREATE UNIQUE INDEX IF NOT EXISTS episode_event_links_episode_order_unique
         ON episode_event_links(episode_id, order_in_episode)
     `,
   )
-  runOptionalSchemaUpdate(
+  await runOptionalSchemaUpdate(
     db,
     sql`
       CREATE UNIQUE INDEX IF NOT EXISTS episode_event_links_novel_event_unique
@@ -192,7 +222,7 @@ export function initializeDatabase(db: DatabaseClient) {
     `,
   )
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS characters (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -213,12 +243,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS characters_project_name_unique
       ON characters(project_id, name)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS scenes (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -234,12 +264,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS scenes_project_name_unique
       ON scenes(project_id, name)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS props (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -254,12 +284,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS props_project_name_unique
       ON props(project_id, name)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS episode_character_links (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -271,12 +301,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS episode_character_links_episode_character_unique
       ON episode_character_links(episode_id, character_id)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS episode_scene_links (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -288,12 +318,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS episode_scene_links_episode_scene_unique
       ON episode_scene_links(episode_id, scene_id)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS episode_prop_links (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -305,12 +335,12 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS episode_prop_links_episode_prop_unique
       ON episode_prop_links(episode_id, prop_id)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS storyboards (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -342,16 +372,16 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN prop_ids_json TEXT NOT NULL DEFAULT '[]'`)
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN script_section_no INTEGER`)
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN emotion TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN prop_ids_json TEXT NOT NULL DEFAULT '[]'`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN script_section_no INTEGER`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE storyboards ADD COLUMN emotion TEXT`)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS storyboards_episode_shot_no_unique
       ON storyboards(episode_id, shot_no)
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS agent_runs (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -369,7 +399,7 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS generation_tasks (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -392,10 +422,10 @@ export function initializeDatabase(db: DatabaseClient) {
     )
   `)
 
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE generation_tasks ADD COLUMN target_type TEXT`)
-  runOptionalSchemaUpdate(db, sql`ALTER TABLE generation_tasks ADD COLUMN target_id TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE generation_tasks ADD COLUMN target_type TEXT`)
+  await runOptionalSchemaUpdate(db, sql`ALTER TABLE generation_tasks ADD COLUMN target_id TEXT`)
 
-  db.run(sql`
+  await db.run(sql`
     CREATE TABLE IF NOT EXISTS assets (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id),
@@ -415,12 +445,12 @@ export function initializeDatabase(db: DatabaseClient) {
   `)
 }
 
-function runOptionalSchemaUpdate(
+async function runOptionalSchemaUpdate(
   db: DatabaseClient,
   statement: Parameters<DatabaseClient['run']>[0],
 ) {
   try {
-    db.run(statement)
+    await db.run(statement)
   } catch {
     // Best-effort compatibility for existing local MVP databases.
   }

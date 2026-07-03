@@ -22,7 +22,7 @@ describe('app routes', () => {
     process.env.IMAGE_PROVIDER_BASE_URL = 'http://localhost/image'
 
     try {
-      const app = await createApp()
+      const { app } = await createApp()
       const response = await app.request('/health')
 
       expect(response.status).toBe(200)

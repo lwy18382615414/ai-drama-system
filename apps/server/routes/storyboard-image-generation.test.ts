@@ -26,7 +26,7 @@ interface ApiResponse<T> {
 
 async function createTestApp(imageUrl = '/static/mock-images/storyboard-route.png') {
   const db = await createDatabase(':memory:')
-  initializeDatabase(db)
+  await initializeDatabase(db)
 
   const now = new Date().toISOString()
   await db.insert(projects).values({

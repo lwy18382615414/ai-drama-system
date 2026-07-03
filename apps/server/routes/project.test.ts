@@ -24,7 +24,7 @@ interface ApiResponse<T> {
 
 async function createTestApp() {
   const db = await createDatabase(':memory:')
-  initializeDatabase(db)
+  await initializeDatabase(db)
   const provider = new MockStructuredTextProvider(() => ({
     title: '重生之当众撕开真相',
     description: '林晚在订婚宴上发现未婚夫与亲姐密谋夺产，她选择当众揭穿。',

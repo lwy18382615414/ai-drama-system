@@ -36,7 +36,7 @@ async function createTestApp(
   responseFactory?: (request: ImageGenerationRequest) => string,
 ) {
   const db = await createDatabase(':memory:')
-  initializeDatabase(db)
+  await initializeDatabase(db)
 
   const now = new Date().toISOString()
   await db.insert(projects).values({

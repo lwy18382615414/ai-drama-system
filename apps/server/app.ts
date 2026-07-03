@@ -23,7 +23,7 @@ import { createImageGenerationRoutes } from './routes/image-generation.js'
 
 export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
-  initializeDatabase(db)
+  await initializeDatabase(db)
 
   const provider = createTextProvider()
   const imageProvider = createImageProvider()
@@ -53,7 +53,7 @@ export async function createApp() {
   app.route('/', createStoryboardRoutes({ db, provider }))
   app.route('/', createImageGenerationRoutes({ db, imageProvider }))
 
-  return app
+  return { app, db }
 }
 
 function createTextProvider(): StructuredTextProvider {

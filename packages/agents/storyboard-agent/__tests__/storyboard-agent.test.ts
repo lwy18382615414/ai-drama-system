@@ -21,7 +21,7 @@ import type { StoryboardAgentInput, StoryboardAgentOutput } from '../schema.js'
 
 async function createTestDb() {
   const db = await createDatabase(':memory:')
-  initializeDatabase(db)
+  await initializeDatabase(db)
   return db
 }
 

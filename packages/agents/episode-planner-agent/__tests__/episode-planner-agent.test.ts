@@ -16,7 +16,7 @@ import type { EpisodePlannerInput, EpisodePlannerSourceEvent } from '../schema.j
 
 async function createTestDb() {
   const db = await createDatabase(':memory:')
-  initializeDatabase(db)
+  await initializeDatabase(db)
   return db
 }
 
