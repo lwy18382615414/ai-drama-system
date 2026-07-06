@@ -21,6 +21,7 @@ import { createProjectRoutes } from './routes/project.js'
 import { createScriptRoutes } from './routes/script.js'
 import { createStoryboardRoutes } from './routes/storyboard.js'
 import { createImageGenerationRoutes } from './routes/image-generation.js'
+import { createTaskStreamRoutes } from './routes/task-stream.js'
 
 export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
@@ -60,6 +61,7 @@ export async function createApp() {
   app.route('/', createAssetRoutes({ db, provider, scheduler: worker }))
   app.route('/', createStoryboardRoutes({ db, provider, scheduler: worker }))
   app.route('/', createImageGenerationRoutes({ db, imageProvider, scheduler: worker }))
+  app.route('/', createTaskStreamRoutes({ db, bus: worker }))
 
   return { app, db, worker }
 }

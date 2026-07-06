@@ -165,4 +165,57 @@ describe('TaskWorker', () => {
     const task = await getTask(db, id)
     expect(task.errorMessage).toContain('unregistered')
   })
+
+  it('emits running then completed lifecycle events to project subscribers', async () => {
+    const db = await setup()
+    const worker = track(new TaskWorker(db, { pollIntervalMs: 3_600_000 }))
+    worker.register('unit_test', async (task) => {
+      await db
+        .update(generationTasks)
+        .set({ status: 'completed', updatedAt: new Date().toISOString() })
+        .where(eq(generationTasks.id, task.id))
+    })
+
+    const events: string[] = []
+    const otherProjectEvents: string[] = []
+    const id = await insertTask(db)
+    worker.subscribe('p1', (event) => {
+      if (event.taskId === id) events.push(event.status)
+    })
+    const unsubscribeOther = worker.subscribe('other-project', (event) => {
+      otherProjectEvents.push(event.status)
+    })
+
+    worker.start()
+    worker.notify()
+
+    await waitFor(async () => events.includes('completed'))
+    unsubscribeOther()
+
+    // Ordered lifecycle for this project; nothing leaked to an unrelated project's listener.
+    expect(events).toEqual(['running', 'completed'])
+    expect(otherProjectEvents).toEqual([])
+  })
+
+  it('stops delivering events after unsubscribe', async () => {
+    const db = await setup()
+    const worker = track(new TaskWorker(db, { pollIntervalMs: 3_600_000 }))
+    worker.register('unit_test', async (task) => {
+      await db
+        .update(generationTasks)
+        .set({ status: 'completed', updatedAt: new Date().toISOString() })
+        .where(eq(generationTasks.id, task.id))
+    })
+
+    const events: string[] = []
+    const unsubscribe = worker.subscribe('p1', (event) => events.push(event.status))
+    unsubscribe()
+
+    const id = await insertTask(db)
+    worker.start()
+    worker.notify()
+
+    await waitFor(async () => (await getTask(db, id)).status === 'completed')
+    expect(events).toEqual([])
+  })
 })

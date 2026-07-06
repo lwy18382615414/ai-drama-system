@@ -21,6 +21,7 @@ The Hono app mounts the route groups in `apps/server/app.ts`:
 - Asset extraction routes at the root app path with full `/api/...` route definitions
 - Storyboard routes at the root app path with full `/api/...` route definitions
 - Image generation routes at the root app path with full `/api/...` route definitions
+- Task stream (SSE) routes at the root app path with full `/api/...` route definitions
 
 ## Response Envelope
 
@@ -366,6 +367,24 @@ Fetches a generation task by ID for polling.
 #### `GET /api/projects/:projectId/assets`
 
 Lists generated asset records for a project.
+
+## Task Stream (SSE) Routes
+
+Implemented by `apps/server/routes/task-stream.ts` and `apps/server/services/task-stream-service.ts`. This is the primary real-time channel for async task progress; the per-task polling endpoints above remain as a fallback. Full contract in `docs/task-stream.md`.
+
+### `GET /api/projects/:projectId/tasks/stream`
+
+Opens a Server-Sent Events stream of task lifecycle updates for a project (`Content-Type: text/event-stream`). `404` if the project is not found.
+
+Events:
+
+- `snapshot` — pushed once on every (re)connect. `data` is `{ "tasks": [TaskEvent, ...] }` containing all active tasks (`pending`/`running`) plus tasks that reached a terminal state within the last `RECOVERABLE_TERMINAL_WINDOW_MS` (5 minutes). Clients rebuild their state from this, so page refresh / reconnection recover automatically without persisting `taskId` client-side.
+- `task` — incremental update when a task changes status. `data` is a single `TaskEvent`; the SSE `id` is the task's `updatedAt`.
+- `ping` — periodic (~15s) empty keep-alive; clients ignore it.
+
+`TaskEvent` fields: `taskId`, `projectId`, `taskType`, `status` (`pending`/`running`/`completed`/`failed`), `targetType`, `targetId`, `episodeId`, `storyboardId`, `retryCount`, `errorMessage`, `updatedAt` (defined in `packages/tasks/task-event.ts`).
+
+Events are emitted by the in-process `TaskWorker` (which implements `TaskEventBus`) at claim (`running`) and at run settlement (`completed`/`failed`/requeued). The bus is process-local; multi-process deployment would swap it for Redis Pub/Sub (or Postgres `LISTEN/NOTIFY`), on the same evolution line as the `TaskScheduler`→BullMQ swap.
 
 ## Later Phase 2 API Boundary
 

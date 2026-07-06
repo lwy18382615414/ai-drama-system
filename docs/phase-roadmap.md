@@ -96,6 +96,21 @@ Boundary notes:
 - This applies to structured text generation for the Phase 1 agents only.
 - Image generation has its own required `OpenAICompatibleImageProvider` runtime configuration.
 
+## Task Streaming Infrastructure
+
+Status: complete.
+
+Scope:
+
+- The in-process `TaskWorker` implements a `TaskEventBus` (`packages/tasks/task-worker.ts`, `packages/tasks/task-event.ts`), emitting a `TaskEvent` at task claim (`running`) and run settlement (`completed`/`failed`/requeued) — no changes to agent runners.
+- Add `GET /api/projects/:projectId/tasks/stream` (SSE) as the primary real-time channel for task progress (`apps/server/routes/task-stream.ts`).
+- Snapshot-on-connect reconnection recovery via `listRecoverableTasks` (`apps/server/services/task-stream-service.ts`): active tasks plus terminal tasks from the last 5 minutes.
+- Per-task polling endpoints are retained as a fallback. Full contract in `docs/task-stream.md`.
+
+Boundary notes:
+
+- The event bus is process-local (single-process MVP). Multi-process deployment swaps it for Redis Pub/Sub or Postgres `LISTEN/NOTIFY`, on the same evolution line as `TaskScheduler`→BullMQ.
+
 ## Phase 2A: Active ImageProvider + Image Task Infrastructure
 
 Status: complete.
@@ -193,4 +208,5 @@ When phase status changes, update all of the following files together:
 - `docs/database-design.md`
 - `docs/api-design.md`
 - `docs/provider-adapter.md`
+- `docs/task-stream.md`
 - `docs/phase-roadmap.md`

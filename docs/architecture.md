@@ -118,7 +118,13 @@ The server composition root constructs the structured text provider from require
 
 ## Frontend Workbench
 
-`apps/web` implements the Vue 3 / Vite / Naive UI workbench with pages for project list/overview, novel import, episode planning, script editing, asset management, character images, and storyboards. It talks to the API server through an axios client and polls `generation_tasks` for async task status.
+`apps/web` implements the Vue 3 / Vite / Naive UI workbench with pages for project list/overview, novel import, episode planning, script editing, asset management, character images, and storyboards. It talks to the API server through an axios client. For async task status it subscribes to the per-project SSE stream (`GET /api/projects/:projectId/tasks/stream`) as the primary channel, with per-task polling (`GET /api/generation-tasks/:taskId` and the agent-specific status routes) retained as a fallback.
+
+## Real-Time Task Streaming
+
+Task lifecycle updates are pushed to clients over Server-Sent Events instead of relying solely on polling. The in-process `TaskWorker` (`packages/tasks/task-worker.ts`) implements a `TaskEventBus`, emitting a `TaskEvent` when a task is claimed (`running`) and when a run settles (`completed`/`failed`/requeued). The SSE route (`apps/server/routes/task-stream.ts`) subscribes to that bus per project.
+
+Reconnection recovery uses a snapshot-on-connect model: on every (re)connect the server first sends a `snapshot` event — all active tasks plus recently settled ones from `listRecoverableTasks` — so a client rebuilt from a page refresh reconciles to the database truth without persisting any `taskId`. The event bus is process-local, matching the current single-process MVP; a multi-process deployment would replace it with Redis Pub/Sub (or Postgres `LISTEN/NOTIFY`), the same evolution line as `TaskScheduler`→BullMQ. See `docs/task-stream.md`.
 
 ## Paused Scope: Later Phase 2
 
@@ -163,6 +169,7 @@ Phase 1 currently exercises:
 - Agent orchestration
 - structured text provider adapter
 - task status persistence
+- real-time task streaming (SSE) with snapshot-on-connect reconnection recovery
 - database persistence
 - agent run logging
 

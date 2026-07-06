@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import type { DatabaseClient, GenerationTask } from '../database/index.js'
 import { generationTasks } from '../database/index.js'
+import { toTaskEvent, type TaskEvent, type TaskEventBus } from './task-event.js'
 
 /** Reconstructs a task's execution from its persisted row (input lives in `inputJson`) and runs it. */
 export type TaskHandler = (task: GenerationTask) => Promise<void>
@@ -24,9 +25,11 @@ export interface TaskWorkerOptions {
  * rows, so pending/interrupted work survives a restart. Designed to be swapped for BullMQ later
  * behind the same {@link TaskScheduler} surface.
  */
-export class TaskWorker implements TaskScheduler {
+export class TaskWorker implements TaskScheduler, TaskEventBus {
   private readonly handlers = new Map<string, TaskHandler>()
   private readonly inFlight = new Set<string>()
+  /** Live task-event listeners, keyed by projectId, for SSE fan-out. */
+  private readonly listeners = new Map<string, Set<(event: TaskEvent) => void>>()
   private readonly concurrency: number
   private readonly maxRetries: number
   private readonly pollIntervalMs: number
@@ -70,6 +73,44 @@ export class TaskWorker implements TaskScheduler {
   /** Triggers an immediate drain pass (near-zero latency, replaces the old `setTimeout` dispatch). */
   notify(): void {
     void this.drain()
+  }
+
+  /** {@link TaskEventBus} — registers a per-project listener; returns an unsubscribe function. */
+  subscribe(projectId: string, listener: (event: TaskEvent) => void): () => void {
+    let set = this.listeners.get(projectId)
+    if (!set) {
+      set = new Set()
+      this.listeners.set(projectId, set)
+    }
+    set.add(listener)
+
+    return () => {
+      const current = this.listeners.get(projectId)
+      if (!current) return
+      current.delete(listener)
+      if (current.size === 0) this.listeners.delete(projectId)
+    }
+  }
+
+  /** Fans a task row out to its project's listeners. One bad listener can't wedge the worker. */
+  private notifyListeners(task: GenerationTask): void {
+    const set = this.listeners.get(task.projectId)
+    if (!set || set.size === 0) return
+    const event = toTaskEvent(task)
+    for (const listener of set) {
+      try {
+        listener(event)
+      } catch {
+        // Listener failures are isolated; task execution must not be affected.
+      }
+    }
+  }
+
+  /** Re-reads a task and emits its current status. Used after a run settles (completed/failed/requeued). */
+  private async emitCurrent(taskId: string): Promise<void> {
+    if (this.listeners.size === 0) return
+    const [task] = await this.db.select().from(generationTasks).where(eq(generationTasks.id, taskId)).limit(1)
+    if (task) this.notifyListeners(task)
   }
 
   /**
@@ -134,25 +175,32 @@ export class TaskWorker implements TaskScheduler {
       return this.claimNext()
     }
 
-    return { ...task, status: 'running' }
+    const claimed = { ...task, status: 'running', startedAt: now, updatedAt: now, errorMessage: null }
+    this.notifyListeners(claimed)
+    return claimed
   }
 
   private async runClaimed(task: GenerationTask): Promise<void> {
-    const handler = this.handlers.get(task.taskType)
-    if (!handler) {
-      await this.markFailed(task.id, `No handler registered for task type: ${task.taskType}`)
-      return
-    }
-
     try {
-      // Handlers delegate to runners that own their own final status (completed/failed).
-      await handler(task)
-    } catch (error) {
-      // Runners don't normally throw, but guard so one bad task can't wedge the loop.
-      await this.markFailed(task.id, error)
-    }
+      const handler = this.handlers.get(task.taskType)
+      if (!handler) {
+        await this.markFailed(task.id, `No handler registered for task type: ${task.taskType}`)
+        return
+      }
 
-    await this.maybeRetry(task.id)
+      try {
+        // Handlers delegate to runners that own their own final status (completed/failed).
+        await handler(task)
+      } catch (error) {
+        // Runners don't normally throw, but guard so one bad task can't wedge the loop.
+        await this.markFailed(task.id, error)
+      }
+
+      await this.maybeRetry(task.id)
+    } finally {
+      // Emit the settled state (completed / failed / requeued-to-pending) to any subscribers.
+      await this.emitCurrent(task.id)
+    }
   }
 
   /** If the handler left the task `failed` and retries remain, requeue it as `pending`. */

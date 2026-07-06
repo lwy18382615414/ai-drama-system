@@ -44,8 +44,13 @@ export function closeDatabase(db: DatabaseClient) {
 
   const dir = ephemeralDirs.get(db)
   if (dir) {
-    rmSync(dir, { recursive: true, force: true })
-    ephemeralDirs.delete(db)
+    try {
+      rmSync(dir, { recursive: true, force: true })
+      ephemeralDirs.delete(db)
+    } catch {
+      // On Windows the libSQL WAL handle may linger briefly after close(), making an immediate
+      // unlink race (EBUSY). Leave the entry so the process-exit handler sweeps it up later.
+    }
   }
 }
 
