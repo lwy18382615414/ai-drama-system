@@ -1,13 +1,12 @@
 import { eq } from 'drizzle-orm'
-import type { DatabaseClient, Episode, NovelChapter, Project } from '../../database/index.js'
-import { episodes, novelChapters, novelEvents, projects } from '../../database/index.js'
+import type { DatabaseClient, NovelChapter, Project } from '../../database/index.js'
+import { novelChapters, novelEvents, projects } from '../../database/index.js'
 import type { EpisodePlannerInput, EpisodePlannerSourceEvent } from './schema.js'
 
 export interface EpisodePlannerContext {
   project: Project
   chapters: NovelChapter[]
   novelEvents: EpisodePlannerSourceEvent[]
-  existingEpisodes: Episode[]
 }
 
 export async function buildEpisodePlannerContext(
@@ -68,16 +67,9 @@ export async function buildEpisodePlannerContext(
     }
   }
 
-  const existingEpisodes = await db
-    .select()
-    .from(episodes)
-    .where(eq(episodes.projectId, input.projectId))
-    .orderBy(episodes.episodeNo)
-
   return {
     project,
     chapters: selectedChapters,
     novelEvents: [...input.novelEvents].sort((a, b) => a.chapterNo - b.chapterNo || a.eventNo - b.eventNo),
-    existingEpisodes,
   }
 }

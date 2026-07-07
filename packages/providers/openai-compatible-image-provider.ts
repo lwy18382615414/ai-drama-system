@@ -12,9 +12,16 @@ export interface OpenAICompatibleImageProviderOptions {
   staticDir: string
   /** URL prefix under which `staticDir` is served. Defaults to `/static`. */
   staticUrlBase?: string
+  /**
+   * How the `size` request parameter is expressed. OpenAI/gpt-image models take
+   * fixed pixel dimensions (`1024x1024`); Volcengine Ark Seedream models take a
+   * resolution tier string (`1K`/`2K`/`4K`). Defaults to `pixels`.
+   */
+  sizeMode?: 'pixels' | 'tier'
 }
 
 type OpenAIImageSize = '256x256' | '512x512' | '1024x1024' | '1536x1024' | '1024x1536'
+type SeedreamSizeTier = '1K' | '2K' | '4K'
 
 export class OpenAICompatibleImageProvider implements ImageProvider {
   readonly name = 'openai-compatible'
@@ -23,19 +30,24 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
   private readonly client: OpenAI
   private readonly staticDir: string
   private readonly staticUrlBase: string
+  private readonly sizeMode: 'pixels' | 'tier'
 
   constructor(options: OpenAICompatibleImageProviderOptions) {
     this.model = options.model
     this.client = new OpenAI({ baseURL: options.baseURL, apiKey: options.apiKey })
     this.staticDir = options.staticDir
     this.staticUrlBase = (options.staticUrlBase ?? '/static').replace(/\/$/, '')
+    this.sizeMode = options.sizeMode ?? 'pixels'
   }
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
+    // Seedream reports resolution tiers (`2K`) that fall outside the OpenAI SDK's
+    // `size` literal union, so cast through the SDK's expected type.
+    const size = this.resolveSize(request) as unknown as OpenAIImageSize
     const response = await this.client.images.generate({
       model: this.model,
       prompt: this.buildPrompt(request),
-      size: this.resolveSize(request),
+      size,
       n: 1,
     })
 
@@ -74,7 +86,13 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     return parts.join('\n')
   }
 
-  private resolveSize(request: ImageGenerationRequest): OpenAIImageSize {
+  private resolveSize(request: ImageGenerationRequest): OpenAIImageSize | SeedreamSizeTier {
+    // Volcengine Ark Seedream expresses size as a resolution tier rather than
+    // fixed pixel dimensions, and derives the aspect ratio from the prompt.
+    if (this.sizeMode === 'tier') {
+      return '2K'
+    }
+
     const width = request.width
     const height = request.height
     if (!width || !height) {

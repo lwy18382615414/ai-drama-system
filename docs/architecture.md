@@ -44,7 +44,7 @@ novel_chapters
 ↓
 novel_events
 ↓
-episodes + episode_event_links
+batches → episodes + episode_event_links
 ↓
 scripts
 ↓
@@ -58,11 +58,18 @@ storyboards
 
 Extracts structured story events from source chapter text.
 
-### Phase 1B EpisodePlannerAgent
+### Phase 1B EpisodePlannerAgent (batched)
 
-`novel_events → episodes + episode_event_links`
+`novel_events → batches → episodes + episode_event_links`
 
-Groups source events into short-drama episodes and records the ordered event links used by each episode.
+Groups source events into short-drama episodes and records the ordered event links used by
+each episode. Planning is **batched and re-runnable**: a batch is one contiguous chapter
+range planned into one contiguous episode range. Two operations exist — plan the next batch
+(`startBatchPlanning`, chapter start auto-locked to the previous batch's end + 1) and re-plan
+an existing batch (`startBatchReplan`, scoped destructive: rebuilds only that batch's episodes
+and renumbers following batches to keep `episode_no` globally continuous). Planning a batch is
+rejected (422) if any chapter in the selected range has not had its events extracted. See
+`docs/database-design.md` (batches / episodes) and `docs/api-design.md` (batch routes).
 
 ### Phase 1C ScriptAgent
 

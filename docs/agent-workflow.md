@@ -146,9 +146,14 @@ Persistence boundary:
 - Creates `generation_tasks` task status records.
 - Creates `agent_runs` logs.
 
+Planning is batched (see `docs/api-design.md`): each batch is a contiguous chapter range
+planned into a contiguous episode range, tracked in the `batches` table with `episodes.batchId`.
+
 Routes:
 
-- `POST /api/projects/:projectId/plan-episodes`
+- `GET /api/projects/:projectId/batches`
+- `POST /api/projects/:projectId/batches` (plan next batch)
+- `POST /api/projects/:projectId/batches/:batchId/replan` (scoped destructive re-plan)
 - `GET /api/projects/:projectId/episodes`
 - `GET /api/episodes/:episodeId/events`
 

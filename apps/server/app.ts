@@ -91,11 +91,23 @@ function createImageProvider(): ImageProvider {
     )
   }
 
+  const model = process.env.IMAGE_PROVIDER_MODEL ?? 'gpt-image-2'
+  // Volcengine Ark Seedream models take a resolution tier (`2K`) as `size`
+  // instead of pixel dimensions. Auto-detect by model name, overridable via env.
+  const sizeMode =
+    process.env.IMAGE_PROVIDER_SIZE_MODE === 'tier' ||
+    process.env.IMAGE_PROVIDER_SIZE_MODE === 'pixels'
+      ? process.env.IMAGE_PROVIDER_SIZE_MODE
+      : /seedream|seededit/i.test(model)
+        ? 'tier'
+        : 'pixels'
+
   return new OpenAICompatibleImageProvider({
     baseURL,
     apiKey,
-    model: process.env.IMAGE_PROVIDER_MODEL ?? 'gpt-image-2',
+    model,
     staticDir: STATIC_DIR,
     staticUrlBase: STATIC_URL_BASE,
+    sizeMode,
   })
 }

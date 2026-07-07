@@ -12,7 +12,9 @@ novel text → chapter events → adapted script → characters/scenes/props →
 
 Phase 1 is complete. The completed backend narrative pipeline is:
 
-novel_chapters → novel_events → episodes + episode_event_links → scripts → characters/scenes/props → storyboards.
+novel_chapters → novel_events → batches → episodes + episode_event_links → scripts → characters/scenes/props → storyboards.
+
+Episode planning is batched and re-runnable: a batch is one contiguous chapter range planned into one contiguous episode range (`batches` table, `episodes.batchId`). Supports planning the next batch and scoped re-planning of an existing batch with global episode renumbering. See `docs/database-design.md` and `docs/api-design.md`.
 
 Phase 2A–2C are complete: character reference images, scene reference images, storyboard first frames, and episode-level batch image generation.
 

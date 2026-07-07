@@ -160,18 +160,36 @@ Returns:
 
 Implemented by `apps/server/routes/episode-planner.ts`.
 
-### `POST /api/projects/:projectId/plan-episodes`
+Planning is **batched**: chapters are grouped into contiguous batches, each planned into
+a contiguous run of episodes. A batch is a first-class entity (`batches` table); episodes
+carry a `batchId`. Global `episodeNo` stays continuous across batches.
 
-Starts EpisodePlannerAgent planning for a project.
+### `GET /api/projects/:projectId/batches`
+
+Lists the project's batches (ordered by `batchNo`), each with its chapter/episode ranges
+and status (`planned | replanning | failed`).
+
+### `POST /api/projects/:projectId/batches`
+
+Plans the **next batch**. The chapter start is locked to `(last batch's chapterEndNo) + 1`;
+the body picks `chapterEndNo`. Rejects with `422` if any chapter in the selected range has
+not had its events extracted (`status !== 'event_extracted'`), listing the offending
+chapter numbers. Enqueues EpisodePlannerAgent, returns `202 Accepted` with `{ taskId, batchId }`.
 
 Purpose:
 
-- `novel_events → episodes + episode_event_links`
-- creates episode records
-- creates ordered source event links
-- creates a task record
-- logs the Agent run
-- returns `202 Accepted`
+- `novel_events (selected chapters) → episodes + episode_event_links`
+- appends episodes after the last batch's episodes
+- creates a task record, logs the Agent run
+
+### `POST /api/projects/:projectId/batches/:batchId/replan`
+
+**Scoped destructive re-plan** of one batch. Deletes that batch's episode orchestration
+(episodes / scripts / storyboards / links / storyboard first-frame images), preserves the
+project-level character/scene/prop libraries, then re-plans from the batch's chapter events.
+If the new episode count differs, following batches' `episodeNo` auto-renumber to stay
+continuous. The delete + renumber run inside the agent's success transaction, so a provider
+failure leaves the old episodes intact. Returns `202 Accepted`.
 
 ### `GET /api/projects/:projectId/episodes`
 
