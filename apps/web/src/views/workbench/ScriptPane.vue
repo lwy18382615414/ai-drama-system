@@ -134,7 +134,6 @@ import { computed, ref, toRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { workbenchApi } from '@/api'
 import type { Batch, Chapter, Episode, EpisodeEventLink, Script } from '@/api/workbench'
-import { ApiCode, ApiError } from '@/api/types'
 import { useTaskStream } from '@/composables/useTaskStream'
 
 const props = defineProps<{ projectId: string; inspOn: boolean }>()
@@ -250,24 +249,20 @@ async function selectEpisode(i: number) {
   script.value = null
   sourceEvents.value = []
   try {
-    // Script may legitimately not exist yet (404) — treat as "no script", not an error.
+    // The episode may not have a script yet; the server returns `script: null` for that.
     const [scriptRes, eventsRes] = await Promise.allSettled([
       workbenchApi.getEpisodeScript(ep.id),
       workbenchApi.getEpisodeEvents(ep.id),
     ])
     if (scriptRes.status === 'fulfilled') {
       script.value = scriptRes.value.script
-    } else if (!isNotFound(scriptRes.reason)) {
+    } else {
       ElMessage.error('加载剧本失败')
     }
     if (eventsRes.status === 'fulfilled') sourceEvents.value = eventsRes.value.events
   } finally {
     scriptLoading.value = false
   }
-}
-
-function isNotFound(err: unknown): boolean {
-  return err instanceof ApiError && err.code === ApiCode.NotFound
 }
 
 async function generate() {

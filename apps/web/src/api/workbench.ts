@@ -190,10 +190,8 @@ export function getEpisodeEvents(episodeId: string) {
 }
 
 export function getEpisodeScript(episodeId: string) {
-  // 404 is expected when the episode has no script yet — suppress the toast.
-  return get<{ episode: Episode; script: Script }>(`/api/episodes/${episodeId}/script`, {
-    skipErrorToast: true,
-  })
+  // The episode may have no script yet; the server returns 200 with `script: null` in that case.
+  return get<{ episode: Episode; script: Script | null }>(`/api/episodes/${episodeId}/script`)
 }
 
 export function getEpisodeStoryboards(episodeId: string) {

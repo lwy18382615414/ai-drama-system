@@ -57,10 +57,8 @@ export function createScriptRoutes(deps: ScriptRouteDeps) {
         return notFound(c, 'Episode not found')
       }
 
-      if (!result.script) {
-        return notFound(c, 'Script not found')
-      }
-
+      // The episode exists but has no script yet — that's a valid state, not an error.
+      // Return 200 with `script: null` so callers don't have to treat "not generated yet" as a 404.
       return ok(c, result)
     } catch (error) {
       return handleServiceError(c, error)

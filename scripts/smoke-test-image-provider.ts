@@ -10,12 +10,21 @@ async function main() {
   }
 
   const staticDir = process.env.STATIC_DIR ?? 'data/static'
+  const model = process.env.IMAGE_PROVIDER_MODEL ?? 'gpt-image-2'
+  const sizeMode =
+    process.env.IMAGE_PROVIDER_SIZE_MODE === 'tier' ||
+    process.env.IMAGE_PROVIDER_SIZE_MODE === 'pixels'
+      ? process.env.IMAGE_PROVIDER_SIZE_MODE
+      : /seedream|seededit/i.test(model)
+        ? 'tier'
+        : 'pixels'
   const provider = new OpenAICompatibleImageProvider({
     baseURL,
     apiKey,
-    model: process.env.IMAGE_PROVIDER_MODEL ?? 'gpt-image-2',
+    model,
     staticDir,
     staticUrlBase: '/static',
+    sizeMode,
   })
 
   const result = await provider.generateImage({
