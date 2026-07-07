@@ -14,6 +14,8 @@ novel_chapters
 ↓
 novel_events
 ↓
+batches (contiguous chapter range → contiguous episode range)
+↓
 episodes + episode_event_links
 ↓
 scripts
@@ -35,6 +37,7 @@ Operational logging and task tracking:
 - projects
 - novel_chapters
 - novel_events
+- batches
 - episodes
 - episode_event_links
 - scripts
@@ -112,14 +115,47 @@ Important constraint:
 
 - unique `(chapter_id, event_no)`
 
-### episodes
+### batches
 
-Planned short-drama episodes created by EpisodePlannerAgent.
+A planning batch: one contiguous chapter range planned into one contiguous episode
+range. Production is batched — the user extracts events for a set of chapters, plans them
+as a batch, produces that batch, then adds more chapters as the next batch. Batches are
+created by `startBatchPlanning` and re-planned by `startBatchReplan`.
 
 Fields:
 
 - id
 - project_id
+- batch_no (1-based, contiguous)
+- chapter_start_no
+- chapter_end_no
+- episode_start_no
+- episode_end_no
+- status (`planned` | `replanning` | `failed`)
+- created_at
+- updated_at
+
+Important constraint:
+
+- unique `(project_id, batch_no)`
+
+Rules:
+
+- A new batch's `chapter_start_no` is locked to the previous batch's `chapter_end_no + 1`
+  (first batch starts at chapter 1). Chapter ranges are contiguous, non-overlapping, gapless.
+- Re-planning a batch is scoped: only that batch's episode orchestration is deleted and
+  rebuilt (see `episodes` below); the project-level character/scene/prop libraries are kept.
+
+### episodes
+
+Planned short-drama episodes created by EpisodePlannerAgent. Each episode belongs to a
+batch (`batch_id`); `episode_no` is a project-global, continuous sequence across batches.
+
+Fields:
+
+- id
+- project_id
+- batch_id (nullable FK → batches; set by the planner for every planned episode)
 - episode_no
 - title
 - summary
@@ -134,6 +170,14 @@ Fields:
 Important constraint:
 
 - unique `(project_id, episode_no)`
+
+Renumbering note:
+
+- Re-planning a batch may change its episode count. Following batches' `episode_no` are
+  auto-renumbered inside the planner's success transaction to keep the global sequence
+  continuous. Because of the unique `(project_id, episode_no)` index, the renumber uses a
+  two-phase offset (`shiftEpisodeNumbers` in `packages/database/batch-tx.ts`) to avoid
+  transient collisions.
 
 Phase 2 note:
 
@@ -157,7 +201,8 @@ Fields:
 Important constraints:
 
 - unique `(episode_id, order_in_episode)`
-- unique `(novel_event_id)`
+- unique `(novel_event_id)` — each source event belongs to at most one episode. A batch
+  re-plan therefore deletes the batch's existing links before re-linking its events.
 
 ### scripts
 

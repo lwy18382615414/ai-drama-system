@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
@@ -13,11 +13,31 @@ export const projects = sqliteTable('projects', {
   updatedAt: text('updated_at').notNull(),
 })
 
+export const batches = sqliteTable(
+  'batches',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    batchNo: integer('batch_no').notNull(),
+    chapterStartNo: integer('chapter_start_no').notNull(),
+    chapterEndNo: integer('chapter_end_no').notNull(),
+    episodeStartNo: integer('episode_start_no').notNull(),
+    episodeEndNo: integer('episode_end_no').notNull(),
+    status: text('status').notNull().default('planned'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    projectBatchNoUnique: uniqueIndex('batches_project_batch_no_unique').on(table.projectId, table.batchNo),
+  }),
+)
+
 export const episodes = sqliteTable(
   'episodes',
   {
     id: text('id').primaryKey(),
     projectId: text('project_id').notNull().references(() => projects.id),
+    batchId: text('batch_id').references(() => batches.id),
     episodeNo: integer('episode_no').notNull(),
     title: text('title'),
     summary: text('summary'),
@@ -31,6 +51,7 @@ export const episodes = sqliteTable(
   },
   (table) => ({
     projectEpisodeNoUnique: uniqueIndex('episodes_project_episode_no_unique').on(table.projectId, table.episodeNo),
+    batchIdIdx: index('episodes_batch_id_idx').on(table.batchId),
   }),
 )
 
@@ -321,6 +342,7 @@ export const assets = sqliteTable('assets', {
 
 export const schema = {
   projects,
+  batches,
   episodes,
   scripts,
   novelChapters,
@@ -339,6 +361,7 @@ export const schema = {
 }
 
 export type Project = typeof projects.$inferSelect
+export type Batch = typeof batches.$inferSelect
 export type Episode = typeof episodes.$inferSelect
 export type Script = typeof scripts.$inferSelect
 export type NovelChapter = typeof novelChapters.$inferSelect

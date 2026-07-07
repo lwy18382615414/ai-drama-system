@@ -14,5 +14,7 @@ Thumbs.db
 coverage/
 .vitest/
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.sqlite3
 *.db

@@ -29,8 +29,13 @@ export const EpisodePlannerSourceEventSchema = z.object({
   importance: z.string().optional(),
 })
 
+export const EpisodePlannerModeSchema = z.enum(['create', 'replan'])
+
 export const EpisodePlannerInputSchema = z.object({
   projectId: z.string().min(1),
+  batchId: z.string().min(1).optional(),
+  mode: EpisodePlannerModeSchema.default('create'),
+  episodeStartNo: z.number().int().positive().default(1),
   chapterIds: z.array(z.string().min(1)).min(1),
   novelEvents: z.array(EpisodePlannerSourceEventSchema).min(1),
   styleConfig: EpisodePlannerStyleConfigSchema,
@@ -77,6 +82,7 @@ export const EpisodePlannerResultSchema = z.union([
   EpisodePlannerFailureResultSchema,
 ])
 
+export type EpisodePlannerMode = z.infer<typeof EpisodePlannerModeSchema>
 export type EpisodePlannerOptions = z.infer<typeof EpisodePlannerOptionsSchema>
 export type EpisodePlannerStyleConfig = z.infer<typeof EpisodePlannerStyleConfigSchema>
 export type EpisodePlannerSourceEvent = z.infer<typeof EpisodePlannerSourceEventSchema>

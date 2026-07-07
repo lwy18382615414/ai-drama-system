@@ -1,7 +1,15 @@
 import { nanoid } from 'nanoid'
 import { eq } from 'drizzle-orm'
 import type { DatabaseClient } from '../../database/index.js'
-import { agentRuns, episodeEventLinks, episodes, generationTasks } from '../../database/index.js'
+import {
+  agentRuns,
+  batches,
+  deleteBatchArtifacts,
+  episodeEventLinks,
+  episodes,
+  generationTasks,
+  shiftEpisodeNumbers,
+} from '../../database/index.js'
 import type { StructuredTextProvider } from '../../providers/index.js'
 import { buildEpisodePlannerContext } from './context.js'
 import { buildEpisodePlannerSystemPrompt, buildEpisodePlannerUserPrompt } from './prompt.js'
@@ -85,10 +93,6 @@ export async function runEpisodePlannerAgent(
 
     const context = await buildEpisodePlannerContext(params.db, input)
 
-    if (context.existingEpisodes.length > 0) {
-      throw new Error(`Project already has episodes: ${input.projectId}`)
-    }
-
     const providerResult = await params.provider.generateStructuredJson({
       systemPrompt: buildEpisodePlannerSystemPrompt(),
       userPrompt: buildEpisodePlannerUserPrompt(context, input),
@@ -107,12 +111,31 @@ export async function runEpisodePlannerAgent(
     validateEpisodePlannerOutput(output, context.novelEvents)
 
     const completedAt = new Date().toISOString()
+    const episodeStartNo = input.episodeStartNo
+    const newEpisodeCount = output.episodes.length
+    const newEpisodeEndNo = episodeStartNo + newEpisodeCount - 1
 
     await params.db.transaction(async (tx) => {
+      // Re-plan: tear down the batch's old orchestration, then shift the FOLLOWING
+      // batches' episode numbers by the size delta BEFORE inserting the new episodes,
+      // so the freshly numbered [episodeStartNo, newEpisodeEndNo] range can't collide
+      // with the next batch under the UNIQUE(projectId, episodeNo) index.
+      if (input.mode === 'replan' && input.batchId) {
+        const [batch] = await tx.select().from(batches).where(eq(batches.id, input.batchId)).limit(1)
+
+        await deleteBatchArtifacts(tx, input.batchId)
+
+        if (batch) {
+          const delta = newEpisodeEndNo - batch.episodeEndNo
+          await shiftEpisodeNumbers(tx, input.projectId, batch.episodeEndNo, delta)
+        }
+      }
+
       const episodeRows = output.episodes.map((episode, index) => ({
         id: nanoid(),
         projectId: input.projectId,
-        episodeNo: index + 1,
+        batchId: input.batchId ?? null,
+        episodeNo: episodeStartNo + index,
         title: episode.title,
         summary: episode.summary,
         openingHook: episode.opening_hook,
@@ -140,6 +163,13 @@ export async function runEpisodePlannerAgent(
       )
 
       await tx.insert(episodeEventLinks).values(linkRows)
+
+      if (input.batchId) {
+        await tx
+          .update(batches)
+          .set({ episodeEndNo: newEpisodeEndNo, status: 'planned', updatedAt: completedAt })
+          .where(eq(batches.id, input.batchId))
+      }
 
       await tx
         .update(agentRuns)
@@ -177,6 +207,18 @@ export async function runEpisodePlannerAgent(
     const errorMessage = formatError(error)
 
     await markRunFailed(params.db, agentRunId, taskId, errorMessage, failedAt)
+
+    // Best-effort: surface the failure on the batch so the UI can offer a retry.
+    if (input.batchId) {
+      try {
+        await params.db
+          .update(batches)
+          .set({ status: 'failed', updatedAt: failedAt })
+          .where(eq(batches.id, input.batchId))
+      } catch {
+        // Failure reporting is best-effort; the caller still receives the original error.
+      }
+    }
 
     return {
       success: false,

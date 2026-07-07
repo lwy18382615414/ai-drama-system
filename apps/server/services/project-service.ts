@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod/v4'
 import {
@@ -9,6 +9,7 @@ import type { DatabaseClient } from '../../../packages/database/index.js'
 import {
   agentRuns,
   assets,
+  batches,
   characters,
   episodeCharacterLinks,
   episodeEventLinks,
@@ -186,6 +187,9 @@ export interface ProjectDetail extends ProjectSummary {
   eventCount: number
   propCount: number
   completedImages: number
+  batchCount: number
+  extractedChapterCount: number
+  plannedChapterEndNo: number
 }
 
 async function countFor(builder: () => Promise<{ count: unknown }[]>): Promise<number> {
@@ -221,6 +225,9 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     storyboardEpisodeCount,
     scriptCount,
     completedImages,
+    batchCount,
+    extractedChapterCount,
+    plannedChapterEndNo,
   ] = await Promise.all([
     countFor(() =>
       db
@@ -282,6 +289,25 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
         .from(assets)
         .where(eq(assets.projectId, projectId)),
     ),
+    countFor(() =>
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(batches)
+        .where(eq(batches.projectId, projectId)),
+    ),
+    countFor(() =>
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(novelChapters)
+        .where(and(eq(novelChapters.projectId, projectId), eq(novelChapters.status, 'event_extracted'))),
+    ),
+    // Highest chapter number already planned into a batch (0 when none).
+    countFor(() =>
+      db
+        .select({ count: sql<number>`coalesce(max(${batches.chapterEndNo}), 0)` })
+        .from(batches)
+        .where(eq(batches.projectId, projectId)),
+    ),
   ])
 
   return {
@@ -296,6 +322,9 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     storyboardEpisodeCount,
     scriptCount,
     completedImages,
+    batchCount,
+    extractedChapterCount,
+    plannedChapterEndNo,
     imageCompletion: imageCompletion(completedImages, characterCount, sceneCount, storyboardCount),
   }
 }

@@ -33,16 +33,18 @@ Purpose:
 - Extract structured source events from imported chapter text.
 - Persist ordered event rows for downstream episode planning.
 
-### Phase 1B: EpisodePlannerAgent
+### Phase 1B: EpisodePlannerAgent (batched)
 
-`novel_events → episodes + episode_event_links`
+`novel_events → batches → episodes + episode_event_links`
 
-Status: complete.
+Status: complete. Planning is batched and re-runnable.
 
 Purpose:
 
-- Group source events into short-drama episodes.
-- Persist episode records and ordered links back to the source events.
+- Group source events into short-drama episodes, one contiguous chapter batch at a time.
+- Persist batch records, episode records, and ordered links back to the source events.
+- Support planning the next batch and re-planning an existing batch (scoped destructive,
+  with global episode renumbering). Reject planning a batch whose chapters aren't extracted.
 
 ### Phase 1C: ScriptAgent
 
