@@ -24,6 +24,9 @@ function stubScheduler() {
     notify() {
       notifications += 1
     },
+    async announce() {
+      /* no-op in tests — the real worker pushes SSE events */
+    },
     get count() {
       return notifications
     },

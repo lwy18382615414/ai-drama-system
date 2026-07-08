@@ -314,6 +314,7 @@ async function enqueuePlanningTask(
     updatedAt: now,
   });
 
+  void deps.scheduler.announce(taskId);
   deps.scheduler.notify();
 
   return { taskId, batchId, status: "pending" as const };

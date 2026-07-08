@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { DatabaseClient, GenerationTask } from '../database/index.js'
 import { generationTasks } from '../database/index.js'
 import { enrichTaskEvent, type TaskEvent, type TaskEventBus } from './task-event.js'
@@ -6,8 +6,15 @@ import { enrichTaskEvent, type TaskEvent, type TaskEventBus } from './task-event
 /** Reconstructs a task's execution from its persisted row (input lives in `inputJson`) and runs it. */
 export type TaskHandler = (task: GenerationTask) => Promise<void>
 
-/** Minimal surface the service layer depends on: enqueue a row, then poke the worker to run it. */
+/**
+ * Minimal surface the service layer depends on: enqueue a row, then poke the worker to run it.
+ * {@link announce} pushes a freshly-created task (or batch of tasks) to live SSE listeners so
+ * pending-but-not-yet-claimed tasks appear immediately, rather than only once the worker claims
+ * them (which, under the concurrency cap, may leave queued tasks invisible until a slot frees).
+ */
 export interface TaskScheduler {
+  /** Pushes newly-created tasks to live listeners. Idempotent and safe to call with no subscribers. */
+  announce(taskIds: string | string[]): Promise<void>
   notify(): void
 }
 
@@ -73,6 +80,17 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
   /** Triggers an immediate drain pass (near-zero latency, replaces the old `setTimeout` dispatch). */
   notify(): void {
     void this.drain()
+  }
+
+  /** {@link TaskScheduler} — pushes freshly-created tasks to live listeners so pending tasks show up. */
+  async announce(taskIds: string | string[]): Promise<void> {
+    const ids = Array.isArray(taskIds) ? taskIds : [taskIds]
+    if (ids.length === 0 || this.listeners.size === 0) return
+    const rows = await this.db
+      .select()
+      .from(generationTasks)
+      .where(inArray(generationTasks.id, ids))
+    await Promise.all(rows.map((row) => this.emitEvent(row)))
   }
 
   /** {@link TaskEventBus} — registers a per-project listener; returns an unsubscribe function. */

@@ -100,6 +100,7 @@ export async function startStoryboardGeneration(
     updatedAt: now,
   })
 
+  void deps.scheduler.announce(taskId)
   deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }

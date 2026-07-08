@@ -71,6 +71,7 @@ export async function startEventExtraction(
     updatedAt: now,
   })
 
+  void deps.scheduler.announce(taskId)
   deps.scheduler.notify()
 
   return { taskId, status: 'pending' as const }
@@ -154,6 +155,7 @@ export async function startBatchEventExtraction(
       )
     })
 
+    void deps.scheduler.announce(tasks.map(({ taskId }) => taskId))
     deps.scheduler.notify()
   }
 

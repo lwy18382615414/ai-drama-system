@@ -442,6 +442,7 @@ export async function createProjectFromNovel(deps: CreateProjectFromNovelDeps, r
     })
   })
 
+  void deps.scheduler.announce(taskId)
   deps.scheduler.notify()
 
   return { project, chapters: chapterRows, taskId, taskStatus: 'pending' as const }

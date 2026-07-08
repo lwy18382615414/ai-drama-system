@@ -248,6 +248,7 @@ export async function startImageGeneration(
     storyboardId: target.storyboardId ?? null,
   })
 
+  void deps.scheduler?.announce(taskId)
   deps.scheduler?.notify()
 
   return { taskId, status: 'pending' as const }
