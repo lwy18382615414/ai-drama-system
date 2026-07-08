@@ -10,7 +10,7 @@
           :disabled="busy"
           @click="openPlanner"
         >
-          ➕ 规划新批次
+          规划新批次
         </button>
       </div>
 
@@ -26,7 +26,7 @@
             title="删除本批次剧集与剧本/分镜后重新规划(角色/场景/道具库保留)"
             @click="replan(b)"
           >
-            🔁 重新规划
+            重新规划
           </button>
         </div>
         <div class="bmeta">第{{ b.chapterStartNo }}-{{ b.chapterEndNo }}章 → 第{{ b.episodeStartNo }}-{{ b.episodeEndNo }}集</div>
@@ -80,7 +80,7 @@
       </div>
       <div v-else-if="script" class="scriptwrap">
         <div class="scripthd">
-          <button class="btn" :disabled="busy" @click="regenerate">🔁 重新生成</button>
+          <button class="btn" :disabled="busy" @click="regenerate">重新生成</button>
         </div>
         <div class="script">{{ script.content }}</div>
       </div>
@@ -119,7 +119,7 @@
 
         <div class="sec">资产</div>
         <button class="btn blk" :disabled="!script || busy" @click="extractAssets">
-          🧩 提取角色/场景/道具
+          提取角色/场景/道具
         </button>
       </template>
       <p v-else class="fval" style="color: #9a9da4; padding: 20px 0; text-align: center">
