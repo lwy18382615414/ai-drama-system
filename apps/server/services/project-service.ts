@@ -469,6 +469,7 @@ export async function deleteProject(db: DatabaseClient, projectId: string) {
     await tx.delete(characters).where(eq(characters.projectId, projectId))
     await tx.delete(scripts).where(eq(scripts.projectId, projectId))
     await tx.delete(episodes).where(eq(episodes.projectId, projectId))
+    await tx.delete(batches).where(eq(batches.projectId, projectId))
     await tx.delete(novelEvents).where(eq(novelEvents.projectId, projectId))
     await tx.delete(novelChapters).where(eq(novelChapters.projectId, projectId))
     await tx.delete(projects).where(eq(projects.id, projectId))

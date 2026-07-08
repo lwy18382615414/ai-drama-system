@@ -20,6 +20,8 @@ export interface TaskEvent {
   targetId: string | null
   episodeId: string | null
   storyboardId: string | null
+  targetName: string | null
+  targetLabel: string
   status: string
   retryCount: number
   errorMessage: string | null

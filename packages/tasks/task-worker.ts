@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import type { DatabaseClient, GenerationTask } from '../database/index.js'
 import { generationTasks } from '../database/index.js'
-import { toTaskEvent, type TaskEvent, type TaskEventBus } from './task-event.js'
+import { enrichTaskEvent, type TaskEvent, type TaskEventBus } from './task-event.js'
 
 /** Reconstructs a task's execution from its persisted row (input lives in `inputJson`) and runs it. */
 export type TaskHandler = (task: GenerationTask) => Promise<void>
@@ -92,11 +92,14 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
     }
   }
 
-  /** Fans a task row out to its project's listeners. One bad listener can't wedge the worker. */
-  private notifyListeners(task: GenerationTask): void {
+  /**
+   * Enriches a task row (resolving its target name against the DB) and fans it out to the
+   * project's listeners. One bad listener can't wedge the worker.
+   */
+  private async emitEvent(task: GenerationTask): Promise<void> {
     const set = this.listeners.get(task.projectId)
     if (!set || set.size === 0) return
-    const event = toTaskEvent(task)
+    const event = await enrichTaskEvent(this.db, task)
     for (const listener of set) {
       try {
         listener(event)
@@ -110,7 +113,7 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
   private async emitCurrent(taskId: string): Promise<void> {
     if (this.listeners.size === 0) return
     const [task] = await this.db.select().from(generationTasks).where(eq(generationTasks.id, taskId)).limit(1)
-    if (task) this.notifyListeners(task)
+    if (task) await this.emitEvent(task)
   }
 
   /**
@@ -176,7 +179,7 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
     }
 
     const claimed = { ...task, status: 'running', startedAt: now, updatedAt: now, errorMessage: null }
-    this.notifyListeners(claimed)
+    void this.emitEvent(claimed)
     return claimed
   }
 

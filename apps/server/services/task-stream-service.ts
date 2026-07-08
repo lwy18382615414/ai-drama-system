@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, or } from 'drizzle-orm'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import { generationTasks } from '../../../packages/database/index.js'
-import { toTaskEvent, type TaskEvent } from '../../../packages/tasks/index.js'
+import { enrichTaskEvent, type TaskEvent } from '../../../packages/tasks/index.js'
 
 /**
  * How far back a terminal (completed/failed) task is still worth replaying to a reconnecting
@@ -37,5 +37,5 @@ export async function listRecoverableTasks(
     )
     .orderBy(asc(generationTasks.createdAt))
 
-  return rows.map(toTaskEvent)
+  return Promise.all(rows.map((row) => enrichTaskEvent(db, row)))
 }

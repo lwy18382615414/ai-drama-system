@@ -241,6 +241,17 @@ async function replan(batch: Batch) {
   }
 }
 
+// Reload the episode list (so per-episode script ticks / scriptId refresh) while
+// preserving the current selection, then re-fetch the active episode's script so
+// its content回显 without the user having to switch episodes.
+async function refreshAfterScript() {
+  const activeId = activeEpisode.value?.id
+  const { episodes: rows } = await workbenchApi.getEpisodes(props.projectId)
+  episodes.value = rows
+  const idx = activeId ? rows.findIndex((e) => e.id === activeId) : -1
+  if (idx >= 0) await selectEpisode(idx)
+}
+
 async function selectEpisode(i: number) {
   activeIdx.value = i
   const ep = episodes.value[i]
@@ -303,6 +314,18 @@ watch(
       loadBatches()
       loadEpisodes()
     }
+  },
+)
+
+// Refresh the episode list + active script whenever a script_generation task
+// completes, so the tree's script tick and the canvas content回显 without a manual
+// episode switch.
+watch(
+  () =>
+    streamTasks.value.filter((t) => t.taskType === 'script_generation' && t.status === 'completed')
+      .length,
+  (now, prev) => {
+    if (now > (prev ?? 0)) refreshAfterScript()
   },
 )
 

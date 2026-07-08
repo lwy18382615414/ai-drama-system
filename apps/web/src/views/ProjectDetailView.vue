@@ -74,7 +74,7 @@
     </div>
 
     <!-- Task drawer -->
-    <TaskDrawer v-if="drawerOpen" :tasks="tasks" @close="drawerOpen = false" />
+    <TaskDrawer v-model="drawerOpen" :tasks="tasks" />
   </div>
 </template>
 
