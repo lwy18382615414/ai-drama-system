@@ -8,7 +8,7 @@ import {
   type ImageProvider,
   type StructuredTextProvider,
 } from '../../packages/providers/index.js'
-import { internalError, ok } from './api-response.js'
+import { internalError, ok, routeNotFound } from './api-response.js'
 import { createTaskWorker } from './tasks.js'
 
 const STATIC_DIR = process.env.STATIC_DIR ?? 'data/static'
@@ -51,6 +51,7 @@ export async function createApp() {
   )
 
   app.onError((error, c) => internalError(c, error))
+  app.notFound((c) => routeNotFound(c))
 
   app.get('/health', (c) => ok(c, { ok: true }))
   app.route('/', createNovelRoutes())

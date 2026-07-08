@@ -4,29 +4,64 @@
     <aside class="tree">
       <div class="treehd">
         <span class="thead" style="padding: 0">章节</span>
-        <button class="mini" title="导入小说" @click="openImport">➕ 导入</button>
+        <div style="display: flex; gap: 6px">
+          <button
+            v-if="chapters.length && !selectMode"
+            class="mini"
+            title="多选章节进行提取或删除"
+            @click="enterSelectMode"
+          >
+            多选
+          </button>
+          <button class="mini" title="导入小说" @click="openImport">导入</button>
+        </div>
       </div>
+
+      <template v-if="selectMode">
+        <div class="selbar">
+          <button class="mini" @click="toggleSelectAll">{{ allSelected ? '取消全选' : '全选' }}</button>
+          <button class="mini" @click="exitSelectMode">退出多选</button>
+        </div>
+        <button class="mini blk" :disabled="busy || !selectedIds.size" @click="extractSelected">
+          提取选中({{ selectedIds.size }})
+        </button>
+        <button class="mini blk danger" :disabled="busy || !selectedIds.size" @click="deleteSelected">
+          删除选中({{ selectedIds.size }})
+        </button>
+      </template>
       <button
-        v-if="chapters.length"
+        v-else-if="chapters.length"
         class="mini blk"
         :disabled="busy"
         @click="extractAll"
       >
         ⚡ 批量提取所有事件
       </button>
+
       <button
         v-for="(c, i) in chapters"
         :key="c.id"
-        :class="['trow', i === activeIdx ? 'on' : '']"
-        @click="selectChapter(i)"
+        :class="['trow', !selectMode && i === activeIdx ? 'on' : '', selectMode && !selectable(c) ? 'dis' : '']"
+        :title="selectMode ? rowHint(c) : ''"
+        @click="selectMode ? toggleSelect(c) : selectChapter(i)"
       >
+        <input
+          v-if="selectMode"
+          type="checkbox"
+          class="cb"
+          :checked="selectedIds.has(c.id)"
+          :disabled="!selectable(c)"
+          @click.stop="toggleSelect(c)"
+        />
         {{ c.title || `第${c.chapterNo}章` }}
-        <span v-if="c.status === 'event_extracted'" class="tick">✓</span>
+        <span v-if="selectMode && rowHint(c)" class="hint">{{ rowHint(c) }}</span>
+        <span v-else-if="c.status === 'event_extracted'" class="tick">✓</span>
+        <span v-else-if="c.status === 'event_extracting'" class="spin"></span>
       </button>
       <div v-if="!loading && chapters.length === 0" class="empty" style="padding: 30px 12px">
         <span class="emptyti">暂无章节</span>
         <span style="font-size: 11.5px">导入小说正文后自动切分为章节</span>
-        <button class="btn pri" @click="openImport">➕ 导入小说</button>
+        <button class="btn pri" @click="openImport">导入小说</button>
       </div>
     </aside>
 
@@ -62,7 +97,7 @@
             <span class="emptyti">本章尚未提取事件</span>
             <span style="font-size: 11.5px">事件提取由 AI 后台任务生成</span>
             <button v-if="activeChapter" class="btn pri" :disabled="busy" @click="extractCurrent">
-              ⚡ 提取本章事件
+              提取本章事件
             </button>
           </div>
         </div>
@@ -158,7 +193,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRef, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { workbenchApi } from '@/api'
 import type { Chapter, ChapterPreview, EpubMeta, NovelEvent } from '@/api/workbench'
 import { useTaskStream } from '@/composables/useTaskStream'
@@ -175,6 +210,55 @@ const busy = ref(false)
 const events = ref<NovelEvent[]>([])
 const eventsLoading = ref(false)
 const activeEventIdx = ref(0)
+
+// ---- Multi-select mode (batch extract / batch delete) ----
+const selectMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+/** Highest chapterNo already planned into a batch — those chapters are locked. */
+const plannedEndNo = ref(0)
+
+/** Both batch actions share one selectable set: unplanned and not currently extracting. */
+function selectable(c: Chapter): boolean {
+  return c.chapterNo > plannedEndNo.value && c.status !== 'event_extracting'
+}
+
+function rowHint(c: Chapter): string {
+  if (c.chapterNo <= plannedEndNo.value) return '已规划'
+  if (c.status === 'event_extracting') return '提取中'
+  return ''
+}
+
+const selectableChapters = computed(() => chapters.value.filter(selectable))
+const allSelected = computed(
+  () =>
+    selectableChapters.value.length > 0 &&
+    selectableChapters.value.every((c) => selectedIds.value.has(c.id)),
+)
+
+function enterSelectMode() {
+  selectMode.value = true
+  selectedIds.value = new Set()
+}
+
+function exitSelectMode() {
+  selectMode.value = false
+  selectedIds.value = new Set()
+}
+
+function toggleSelect(c: Chapter) {
+  if (!selectable(c)) return
+  const next = new Set(selectedIds.value)
+  if (next.has(c.id)) {
+    next.delete(c.id)
+  } else {
+    next.add(c.id)
+  }
+  selectedIds.value = next
+}
+
+function toggleSelectAll() {
+  selectedIds.value = allSelected.value ? new Set() : new Set(selectableChapters.value.map((c) => c.id))
+}
 
 // ---- Import modal state ----
 const importOpen = ref(false)
@@ -209,9 +293,13 @@ function eventCharacters(e: NovelEvent): string {
 async function loadChapters() {
   loading.value = true
   try {
-    const { chapters: rows } = await workbenchApi.getChapters(props.projectId)
+    const [{ chapters: rows }, { batches }] = await Promise.all([
+      workbenchApi.getChapters(props.projectId),
+      workbenchApi.getBatches(props.projectId),
+    ])
     chapters.value = rows
-    if (rows.length) await selectChapter(0)
+    plannedEndNo.value = batches.reduce((max, b) => Math.max(max, b.chapterEndNo), 0)
+    if (rows.length) await selectChapter(Math.min(activeIdx.value, rows.length - 1))
   } finally {
     loading.value = false
   }
@@ -302,15 +390,64 @@ async function extractCurrent() {
 }
 
 async function extractAll() {
-  const pending = chapters.value.filter((c) => c.status !== 'event_extracted')
+  const pending = chapters.value.filter((c) => selectable(c) && c.status !== 'event_extracted')
   if (!pending.length) {
-    ElMessage.info('所有章节都已提取事件')
+    ElMessage.info('没有可提取的章节')
     return
   }
   busy.value = true
   try {
-    await Promise.all(pending.map((c) => workbenchApi.extractEvents(props.projectId, c.id)))
-    ElMessage.success(`已为 ${pending.length} 章提交事件提取任务`)
+    const { tasks, skipped } = await workbenchApi.extractEventsBatch(
+      props.projectId,
+      pending.map((c) => c.id),
+    )
+    reportBatchExtraction(tasks.length, skipped.length)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function extractSelected() {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  busy.value = true
+  try {
+    const { tasks, skipped } = await workbenchApi.extractEventsBatch(props.projectId, ids)
+    reportBatchExtraction(tasks.length, skipped.length)
+    exitSelectMode()
+  } finally {
+    busy.value = false
+  }
+}
+
+function reportBatchExtraction(taskCount: number, skippedCount: number) {
+  if (taskCount > 0) {
+    ElMessage.success(`已为 ${taskCount} 章提交事件提取任务,完成后自动刷新`)
+  }
+  if (skippedCount > 0) {
+    ElMessage.warning(`${skippedCount} 章被跳过(已规划或正在提取)`)
+  }
+}
+
+async function deleteSelected() {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${ids.length} 章?章节及其已提取事件将被删除,后续章节编号自动前移。`,
+      '删除章节',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  busy.value = true
+  try {
+    const { deletedCount } = await workbenchApi.deleteChapters(props.projectId, ids)
+    ElMessage.success(`已删除 ${deletedCount} 章`)
+    exitSelectMode()
+    activeIdx.value = 0
+    await loadChapters()
   } finally {
     busy.value = false
   }
@@ -604,6 +741,43 @@ watch(() => props.projectId, loadChapters, { immediate: true })
   margin: 0 0 6px;
   color: #a4432f;
   font-weight: 600;
+}
+.mini.blk.danger {
+  color: #c2372b;
+  border-color: #e5c2bd;
+}
+.mini.blk.danger:hover:not([disabled]) {
+  background: #fbf1ef;
+  border-color: #c2372b;
+}
+
+/* Multi-select mode */
+.selbar {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.selbar .mini {
+  flex: 1;
+}
+.trow.dis {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.cb {
+  flex: none;
+  margin: 0;
+  accent-color: #cf6134;
+  cursor: pointer;
+}
+.cb[disabled] {
+  cursor: not-allowed;
+}
+.hint {
+  margin-left: auto;
+  flex: none;
+  font-size: 10.5px;
+  color: #9a9da4;
 }
 
 /* Import modal */

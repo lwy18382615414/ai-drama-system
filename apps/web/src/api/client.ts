@@ -32,6 +32,10 @@ export const http: AxiosInstance = axios.create({
 
 http.interceptors.response.use(
   (response: AxiosResponse<ApiResponse<unknown>>) => {
+    // Business/logic failures arrive here as HTTP 200 and are distinguished
+    // purely by `code !== Ok` — the backend never exposes an HTTP error status
+    // for them. Only genuine infrastructure failures (network, server 500,
+    // unregistered route 404) reach the error handler below.
     const body = response.data
     // Non-JSON / raw responses (e.g. file downloads) pass through untouched.
     if (!body || typeof body !== 'object' || !('code' in body)) {
@@ -45,8 +49,8 @@ http.interceptors.response.use(
     return response
   },
   (error) => {
-    // Network error, timeout, or an error-status response the backend still
-    // wrapped in the envelope.
+    // Genuine infrastructure failure: network error, timeout, server 500, or an
+    // unregistered-route 404 (still wrapped in the envelope by the backend).
     const body = error?.response?.data as ApiResponse<unknown> | undefined
     const message = body?.message ?? error?.message ?? '网络请求异常'
     const apiError = new ApiError(

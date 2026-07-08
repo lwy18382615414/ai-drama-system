@@ -50,10 +50,12 @@ async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, marker
 }
 
 describe('task stream SSE route', () => {
-  it('returns 404 for an unknown project', async () => {
+  it('reports NotFound (40401) for an unknown project', async () => {
     const { app } = await createTestApp()
     const res = await app.request('/api/projects/missing/tasks/stream')
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { code: number }
+    expect(body.code).toBe(40401)
   })
 
   it('pushes a snapshot event on connect containing recoverable tasks', async () => {

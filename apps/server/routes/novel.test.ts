@@ -53,7 +53,7 @@ describe('novel routes', () => {
       body: JSON.stringify({ text: '' }),
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const envelope = (await response.json()) as ApiResponse<{ issues: unknown[] }>
     expect(envelope.code).toBe(40001)
   })
@@ -92,13 +92,13 @@ describe('novel routes', () => {
       body: epubFormData(Buffer.from('plain text'), 'novel.txt'),
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const envelope = (await response.json()) as ApiResponse<null>
     expect(envelope.code).toBe(40001)
     expect(envelope.message).toContain('.epub')
   })
 
-  it('rejects DRM-protected EPUB uploads with 400', async () => {
+  it('rejects DRM-protected EPUB uploads with InvalidRequestBody (40001)', async () => {
     const app = createTestApp()
     const buffer = await buildEpubFixture({
       chapters: [{ id: 'c1', title: '第一章', body: '<p>正文。</p>' }],
@@ -110,7 +110,7 @@ describe('novel routes', () => {
       body: epubFormData(buffer),
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const envelope = (await response.json()) as ApiResponse<null>
     expect(envelope.message).toContain('DRM')
   })
@@ -125,7 +125,7 @@ describe('novel routes', () => {
       body: form,
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const envelope = (await response.json()) as ApiResponse<null>
     expect(envelope.message).toContain('file')
   })

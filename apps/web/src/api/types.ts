@@ -7,9 +7,11 @@ export const ApiCode = {
   Ok: 0,
   InvalidRequestBody: 40001,
   InvalidQuery: 40002,
+  RouteNotFound: 40400,
   NotFound: 40401,
   Conflict: 40901,
   PayloadTooLarge: 41301,
+  UnprocessableEntity: 42201,
   InternalError: 50001,
 } as const
 

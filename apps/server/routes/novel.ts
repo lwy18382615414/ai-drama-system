@@ -1,12 +1,7 @@
 import { Hono } from 'hono'
-import type { Context } from 'hono'
-import { ApiCode, fail, internalError, invalidRequestBody, ok, serviceErrorCode } from '../api-response.js'
+import { ApiCode, fail, handleServiceError, invalidRequestBody, ok } from '../api-response.js'
 import { previewChapters, PreviewChaptersRequestSchema } from '../services/chapter-import-service.js'
-import {
-  EpubImportServiceError,
-  MAX_EPUB_FILE_SIZE,
-  parseEpubNovel,
-} from '../services/epub-import-service.js'
+import { MAX_EPUB_FILE_SIZE, parseEpubNovel } from '../services/epub-import-service.js'
 
 /**
  * Project-agnostic novel preview endpoints: they split raw input into chapter
@@ -33,11 +28,11 @@ export function createNovelRoutes() {
     const file = body?.file
 
     if (!(file instanceof File)) {
-      return fail(c, ApiCode.InvalidRequestBody, 'Missing "file" field in multipart form data', 400)
+      return fail(c, ApiCode.InvalidRequestBody, 'Missing "file" field in multipart form data')
     }
 
     if (!file.name.toLowerCase().endsWith('.epub')) {
-      return fail(c, ApiCode.InvalidRequestBody, 'Only .epub files are supported', 400)
+      return fail(c, ApiCode.InvalidRequestBody, 'Only .epub files are supported')
     }
 
     if (file.size > MAX_EPUB_FILE_SIZE) {
@@ -45,7 +40,6 @@ export function createNovelRoutes() {
         c,
         ApiCode.PayloadTooLarge,
         `EPUB file exceeds the ${Math.floor(MAX_EPUB_FILE_SIZE / 1024 / 1024)}MB limit`,
-        413,
       )
     }
 
@@ -59,12 +53,4 @@ export function createNovelRoutes() {
   })
 
   return app
-}
-
-function handleServiceError(c: Context, error: unknown) {
-  if (error instanceof EpubImportServiceError) {
-    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 413)
-  }
-
-  return internalError(c, error)
 }

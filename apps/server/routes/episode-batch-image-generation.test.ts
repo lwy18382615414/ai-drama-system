@@ -342,16 +342,16 @@ describe('episode batch image generation routes', () => {
     expect(failedTasks).toHaveLength(1)
   })
 
-  it('returns 404 for an unknown episode', async () => {
+  it('reports NotFound (40401) for an unknown episode', async () => {
     const { app } = await createTestApp()
 
     const genRes = await app.request('/api/episodes/missing/generate-character-images', { method: 'POST' })
-    expect(genRes.status).toBe(404)
+    expect(genRes.status).toBe(200)
     const genBody = (await genRes.json()) as ApiResponse<null>
     expect(genBody.code).toBe(40401)
 
     const statusRes = await app.request('/api/episodes/missing/image-generation-status')
-    expect(statusRes.status).toBe(404)
+    expect(statusRes.status).toBe(200)
     const statusBody = (await statusRes.json()) as ApiResponse<null>
     expect(statusBody.code).toBe(40401)
   })

@@ -13,6 +13,12 @@ export interface TestWorkerOptions {
   imageProvider?: ImageProvider
   /** Defaults to 0 so forced-failure unit tests settle deterministically without background retries. */
   maxRetries?: number
+  /**
+   * Concurrent task slots. Tests asserting on multiple enqueued tasks should pass 1: concurrent
+   * transactions on a single in-memory libsql connection are flaky, and worker concurrency is
+   * covered by task-worker.test.ts.
+   */
+  concurrency?: number
 }
 
 /**
@@ -29,7 +35,7 @@ export function startTestWorker(db: DatabaseClient, options: TestWorkerOptions =
       provider: options.provider ?? new MockStructuredTextProvider(),
       imageProvider: options.imageProvider ?? new MockImageProvider(),
     },
-    { pollIntervalMs: 3_600_000, maxRetries: options.maxRetries ?? 0 },
+    { pollIntervalMs: 3_600_000, maxRetries: options.maxRetries ?? 0, concurrency: options.concurrency },
   )
   worker.start()
   return worker

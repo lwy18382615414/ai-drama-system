@@ -1,10 +1,9 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { z } from 'zod/v4'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { ImageProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
-import { fail, internalError, invalidQuery, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
+import { handleServiceError, invalidQuery, invalidRequestBody, notFound, ok } from '../api-response.js'
 import {
   BatchImageGenerationRequestSchema,
   generateAllEpisodeImages,
@@ -14,7 +13,6 @@ import {
   getEpisodeImageGenerationStatus,
   getGenerationTask,
   getProjectAssets,
-  ImageGenerationServiceError,
   startCharacterReferenceImageGeneration,
   startImageGeneration,
   startSceneReferenceImageGeneration,
@@ -271,14 +269,3 @@ function parseForceQuery(value: string | undefined) {
   return 'invalid' as const
 }
 
-function handleServiceError(c: Context, error: unknown) {
-  if (error instanceof ImageGenerationServiceError) {
-    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 404 | 409)
-  }
-
-  if (error instanceof z.ZodError) {
-    return invalidRequestBody(c, error.issues)
-  }
-
-  return internalError(c, error)
-}

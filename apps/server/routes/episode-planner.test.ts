@@ -134,7 +134,7 @@ describe('episode planner routes', () => {
     expect(listBody.data.batches[0].batchNo).toBe(1)
   })
 
-  it('POST /batches returns 422 when a selected chapter is not extracted', async () => {
+  it('POST /batches reports UnprocessableEntity (42201) when a selected chapter is not extracted', async () => {
     const { app, db } = await createTestApp()
     await seed(db, 'event_extracted')
     await db.update(novelChapters).set({ status: 'pending' }).where(eq(novelChapters.id, 'c2'))
@@ -144,8 +144,9 @@ describe('episode planner routes', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chapterEndNo: 3 }),
     })
-    expect(res.status).toBe(422)
+    expect(res.status).toBe(200)
     const body = (await res.json()) as ApiResponse<{ chapterNos: number[] }>
+    expect(body.code).toBe(42201)
     expect(body.data.chapterNos).toEqual([2])
     // No batch was created for the rejected request.
     expect(await db.select().from(batches).where(eq(batches.projectId, 'p1'))).toHaveLength(0)

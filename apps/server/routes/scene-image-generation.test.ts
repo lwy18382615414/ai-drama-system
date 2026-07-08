@@ -98,7 +98,7 @@ describe('scene image generation routes', () => {
     expect(sceneBody.scene.reference_image_url).toBe('/static/mock-images/scene-route.png')
   })
 
-  it('returns 409 on regeneration without force and 202 with force=true', async () => {
+  it('reports Conflict (40901) on regeneration without force and 202 with force=true', async () => {
     const { app, db } = await createTestApp()
 
     const first = await app.request('/api/scenes/scene-1/generate-image', { method: 'POST' })
@@ -106,7 +106,7 @@ describe('scene image generation routes', () => {
     await waitForTask(db, ((await first.json()) as ApiResponse<{ taskId: string }>).data.taskId)
 
     const conflict = await app.request('/api/scenes/scene-1/generate-image', { method: 'POST' })
-    expect(conflict.status).toBe(409)
+    expect(conflict.status).toBe(200)
     const conflictBody = (await conflict.json()) as ApiResponse<null>
     expect(conflictBody.code).toBe(40901)
 
@@ -121,23 +121,23 @@ describe('scene image generation routes', () => {
 
     const response = await app.request('/api/scenes/scene-1/generate-image?force=maybe', { method: 'POST' })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<null>
     expect(body.code).toBe(40002)
     expect(body.message).toBe('Invalid force query parameter')
     expect(body.data).toBeNull()
   })
 
-  it('returns 404 for an unknown scene', async () => {
+  it('reports NotFound (40401) for an unknown scene', async () => {
     const { app } = await createTestApp()
 
     const res = await app.request('/api/scenes/missing/generate-image', { method: 'POST' })
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(200)
     const body = (await res.json()) as ApiResponse<null>
     expect(body.code).toBe(40401)
 
     const getRes = await app.request('/api/scenes/missing')
-    expect(getRes.status).toBe(404)
+    expect(getRes.status).toBe(200)
     const getBody = (await getRes.json()) as ApiResponse<null>
     expect(getBody.code).toBe(40401)
   })

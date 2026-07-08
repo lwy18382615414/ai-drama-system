@@ -247,6 +247,31 @@ export function extractEvents(projectId: string, chapterId: string) {
   return post<TaskAck>('/api/agents/event/extract', { projectId, chapterId })
 }
 
+/** One chapter the batch extraction endpoint declined to enqueue, with the reason. */
+export interface BatchExtractionSkip {
+  chapterId: string
+  reason: 'planned' | 'extracting'
+}
+
+/**
+ * Enqueue AI event extraction for many chapters (server-side fan-out: one task per chapter).
+ * Planned/extracting chapters come back in `skipped` instead of being enqueued.
+ */
+export function extractEventsBatch(projectId: string, chapterIds: string[]) {
+  return post<{ tasks: Array<{ taskId: string; chapterId: string }>; skipped: BatchExtractionSkip[] }>(
+    '/api/agents/event/extract-batch',
+    { projectId, chapterIds },
+  )
+}
+
+/**
+ * Batch-delete unplanned chapters (all-or-nothing). The server renumbers the surviving
+ * unplanned chapters so chapterNo stays contiguous for future batch planning.
+ */
+export function deleteChapters(projectId: string, chapterIds: string[]) {
+  return post<{ deletedCount: number }>(`/api/projects/${projectId}/chapters/delete`, { chapterIds })
+}
+
 // ---- Generation actions (enqueue async tasks) ----
 
 export function generateScript(episodeId: string) {

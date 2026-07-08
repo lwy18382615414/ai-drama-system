@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
-import type { Context } from 'hono'
 import type { DatabaseClient } from '../../../packages/database/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
-import { fail, internalError, invalidRequestBody, notFound, ok, serviceErrorCode } from '../api-response.js'
+import { handleServiceError, invalidRequestBody, notFound, ok } from '../api-response.js'
 import {
-  ChapterImportServiceError,
+  DeleteChaptersRequestSchema,
+  deleteChapters,
   ImportChaptersRequestSchema,
   importChapters,
 } from '../services/chapter-import-service.js'
@@ -18,7 +18,6 @@ import {
   getProjectChapters,
   getProjectDetail,
   listProjects,
-  ProjectServiceError,
   updateProject,
   UpdateProjectRequestSchema,
 } from '../services/project-service.js'
@@ -68,6 +67,24 @@ export function createProjectRoutes(deps: ProjectRouteDeps) {
     try {
       const chapters = await importChapters(deps.db, c.req.param('projectId'), parsed.data)
       return ok(c, { chapters }, 201)
+    } catch (error) {
+      return handleServiceError(c, error)
+    }
+  })
+
+  // Batch chapter deletion is all-or-nothing: any planned/extracting/unknown chapter in the
+  // selection rejects the whole request so the chapterNo renumbering stays predictable.
+  app.post('/api/projects/:projectId/chapters/delete', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = DeleteChaptersRequestSchema.safeParse(body)
+
+    if (!parsed.success) {
+      return invalidRequestBody(c, parsed.error.issues)
+    }
+
+    try {
+      const result = await deleteChapters(deps.db, c.req.param('projectId'), parsed.data)
+      return ok(c, result)
     } catch (error) {
       return handleServiceError(c, error)
     }
@@ -134,12 +151,4 @@ export function createProjectRoutes(deps: ProjectRouteDeps) {
   })
 
   return app
-}
-
-function handleServiceError(c: Context, error: unknown) {
-  if (error instanceof ProjectServiceError || error instanceof ChapterImportServiceError) {
-    return fail(c, serviceErrorCode(error.statusCode), error.message, error.statusCode as 400 | 404 | 409)
-  }
-
-  return internalError(c, error)
 }

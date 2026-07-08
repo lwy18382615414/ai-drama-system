@@ -186,7 +186,7 @@ describe('storyboard first-frame image generation routes', () => {
     expect(asset.url).toBe('/static/mock-images/storyboard-route.png')
   })
 
-  it('returns 409 on regeneration without force and 202 with force=true', async () => {
+  it('reports Conflict (40901) on regeneration without force and 202 with force=true', async () => {
     const { app, db } = await createTestApp()
 
     const first = await app.request('/api/storyboards/storyboard-1/generate-first-frame', { method: 'POST' })
@@ -194,7 +194,7 @@ describe('storyboard first-frame image generation routes', () => {
     await waitForTask(db, ((await first.json()) as ApiResponse<{ taskId: string }>).data.taskId)
 
     const conflict = await app.request('/api/storyboards/storyboard-1/generate-first-frame', { method: 'POST' })
-    expect(conflict.status).toBe(409)
+    expect(conflict.status).toBe(200)
     const conflictBody = (await conflict.json()) as ApiResponse<null>
     expect(conflictBody.code).toBe(40901)
 
@@ -217,16 +217,16 @@ describe('storyboard first-frame image generation routes', () => {
     expect(activeAssets).toHaveLength(1)
   })
 
-  it('returns 404 for an unknown storyboard', async () => {
+  it('reports NotFound (40401) for an unknown storyboard', async () => {
     const { app } = await createTestApp()
 
     const res = await app.request('/api/storyboards/missing/generate-first-frame', { method: 'POST' })
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(200)
     const body = (await res.json()) as ApiResponse<null>
     expect(body.code).toBe(40401)
 
     const getRes = await app.request('/api/storyboards/missing')
-    expect(getRes.status).toBe(404)
+    expect(getRes.status).toBe(200)
     const getBody = (await getRes.json()) as ApiResponse<null>
     expect(getBody.code).toBe(40401)
   })

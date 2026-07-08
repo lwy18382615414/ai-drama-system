@@ -35,7 +35,21 @@ All JSON routes return a unified response envelope:
 }
 ```
 
-Success responses use `code = 0` and keep the previous route-specific payload inside `data`, such as `{ "project": ... }`, `{ "taskId": "...", "status": "pending" }`, or batch image summaries. HTTP status codes are still meaningful and remain unchanged (`200`, `201`, `202`, and so on).
+Success responses use `code = 0` and keep the previous route-specific payload inside `data`, such as `{ "project": ... }`, `{ "taskId": "...", "status": "pending" }`, or batch image summaries. Success responses keep their standard HTTP status (`200`, `201` created, `202` accepted).
+
+### Failures do not expose an HTTP error status
+
+Business/logic failures **do not** expose an HTTP error status to the client: they return **HTTP 200** and convey the real error solely through the internal `code`. Clients decide as follows:
+
+- `HTTP 200` → read `code`; `code === 0` is success, any other `code` is a business failure.
+- `HTTP !== 200` → a genuine infrastructure failure (see below); show a generic fallback.
+
+Only two failure cases keep a real HTTP status, because they are infrastructure-level, not application-level:
+
+- **`500`** — server crash / unhandled exception (`code 50001`). The raw cause is logged server-side only; the client message is a generic fallback and never leaks internal details.
+- **`404`** — the **route itself** does not exist (`code 40400`, `RouteNotFound`), distinct from a resource that exists-but-is-missing (`HTTP 200 + 40401`).
+
+> Reserved for the future: once authentication is added, `401`/`403` will also keep their real HTTP status (they are infrastructure/transport concerns, like `404`/`500`). Not implemented yet.
 
 Error responses use the same envelope with `data = null` unless extra details are needed:
 
@@ -49,15 +63,19 @@ Error responses use the same envelope with `data = null` unless extra details ar
 }
 ```
 
-Current API codes:
+Current API codes (the numeric prefixes echo the classic HTTP meaning for readability, but the HTTP layer is `200` for every business failure — only `40400` and `50001` ride a real HTTP status):
 
 - `0` success
 - `40001` invalid request body or bad request
 - `40002` invalid query parameter
+- `40400` route not found (real HTTP `404`)
 - `40401` resource not found
 - `40901` resource conflict
 - `41301` payload too large
-- `50001` internal server error
+- `42201` unprocessable entity (semantically invalid request)
+- `50001` internal server error (real HTTP `500`)
+
+Elsewhere in this document, references to `400` / `409` / `413` / `422` describe the **business `code` semantics** (`40001` / `40901` / `41301` / `42201`); the transport-level HTTP status for all of them is `200`.
 
 ## Health
 
@@ -117,6 +135,15 @@ Lists source chapters for a project.
 
 Appends chapters to an existing project. Body: `{ source: 'paste' | 'txt' | 'epub', chapters: [{ title, content }] }`. Chapter numbers continue after the project's current max. Returns `201 Created`.
 
+### `POST /api/projects/:projectId/chapters/delete`
+
+Batch-deletes chapters. Body: `{ chapterIds: string[] }`. All-or-nothing: the whole request is
+rejected when any selected chapter is planned into a batch (`409` — its events are referenced by
+`episode_event_links` and deleting it would break the planner's contiguous chapter-range
+invariant), currently extracting (`409`), or unknown (`400`). On success, each chapter's
+`novel_events` are deleted with it and the surviving unplanned tail is renumbered inside the same
+transaction so `chapterNo` stays contiguous for future batch planning. Returns `{ deletedCount }`.
+
 ## Novel Preview Routes
 
 Implemented by `apps/server/routes/novel.ts`. Both endpoints are project-agnostic (usable before a project exists) and persist nothing.
@@ -143,6 +170,22 @@ Purpose:
 - creates a task record
 - logs the Agent run
 - returns `202 Accepted`
+
+### `POST /api/agents/event/extract-batch`
+
+Starts EventAgent extraction for many chapters via server-side fan-out. Body:
+`{ projectId, chapterIds: string[], options? }`.
+
+- One independent `event_extraction` task is enqueued per eligible chapter (single transaction),
+  so SSE updates, per-chapter status, and per-chapter retry keep single-extract semantics.
+- Unknown chapter ids reject the whole request with `400` (stale client list).
+- Chapters already planned into a batch are skipped with reason `planned` (their events are
+  FK-referenced by `episode_event_links`; re-extraction would violate the FK).
+- Chapters currently extracting (status `event_extracting` or an active extraction task) are
+  skipped with reason `extracting`.
+- Extracted-but-unplanned chapters are re-extracted (delete + reinsert).
+
+Returns `202 Accepted` with `{ tasks: [{ taskId, chapterId }], skipped: [{ chapterId, reason }] }`.
 
 ### `GET /api/agents/event/status/:taskId`
 

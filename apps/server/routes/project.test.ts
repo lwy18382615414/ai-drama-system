@@ -222,7 +222,7 @@ describe('project routes', () => {
       body: JSON.stringify({ title: '' }),
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<{ issues: unknown[] }>
     expect(body.code).toBe(40001)
     expect(body.message).toBe('Invalid request body')
@@ -296,25 +296,25 @@ describe('project routes', () => {
       body: JSON.stringify({ title: '' }),
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<{ issues: unknown[] }>
     expect(body.code).toBe(40001)
     expect(body.message).toBe('Invalid request body')
     expect(body.data.issues).toBeTruthy()
   })
 
-  it('returns 404 for missing project details', async () => {
+  it('reports NotFound (40401) for missing project details', async () => {
     const { app } = await createTestApp()
 
     const response = await app.request('/api/projects/missing-project')
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<null>
     expect(body.code).toBe(40401)
     expect(body.message).toBe('Project not found')
     expect(body.data).toBeNull()
   })
 
-  it('returns 404 when updating a missing project', async () => {
+  it('reports NotFound (40401) when updating a missing project', async () => {
     const { app } = await createTestApp()
 
     const response = await app.request('/api/projects/missing-project', {
@@ -323,7 +323,7 @@ describe('project routes', () => {
       body: JSON.stringify({ title: 'Updated title' }),
     })
 
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<null>
     expect(body.code).toBe(40401)
   })
@@ -384,7 +384,7 @@ describe('project routes', () => {
     expect(persisted).toHaveLength(3)
   })
 
-  it('returns 404 when importing chapters into a missing project', async () => {
+  it('reports NotFound (40401) when importing chapters into a missing project', async () => {
     const { app } = await createTestApp()
 
     const response = await app.request('/api/projects/missing-project/chapters/import', {
@@ -393,7 +393,7 @@ describe('project routes', () => {
       body: JSON.stringify({ source: 'paste', chapters: [{ title: null, content: '正文。' }] }),
     })
 
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<null>
     expect(body.code).toBe(40401)
   })
@@ -454,7 +454,7 @@ describe('project routes', () => {
       body: JSON.stringify({ source: 'paste', chapters: [] }),
     })
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<{ issues: unknown[] }>
     expect(body.code).toBe(40001)
   })
@@ -490,11 +490,11 @@ describe('project routes', () => {
     expect(remainingTasks).toHaveLength(0)
   })
 
-  it('returns 404 when deleting a missing project', async () => {
+  it('reports NotFound (40401) when deleting a missing project', async () => {
     const { app } = await createTestApp()
 
     const response = await app.request('/api/projects/missing-project', { method: 'DELETE' })
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(200)
     const body = (await response.json()) as ApiResponse<null>
     expect(body.code).toBe(40401)
   })
