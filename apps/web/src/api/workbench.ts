@@ -39,6 +39,11 @@ export interface Episode {
   endingHook: string | null
   scriptId: string | null
   status: string
+  // Per-episode pipeline readiness counts (populated by GET /api/projects/:id/episodes).
+  sceneLinkCount: number
+  characterLinkCount: number
+  storyboardCount: number
+  firstFrameDoneCount: number
 }
 
 export interface Script {

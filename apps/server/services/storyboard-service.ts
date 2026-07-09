@@ -61,6 +61,7 @@ export class StoryboardServiceError extends Error {
   constructor(
     message: string,
     readonly statusCode: number,
+    readonly errorCode?: string,
   ) {
     super(message)
   }
@@ -231,7 +232,7 @@ async function buildStoryboardAgentInput(
   const [script] = await db.select().from(scripts).where(eq(scripts.episodeId, episodeId)).limit(1)
 
   if (!script) {
-    throw new StoryboardServiceError(`Script not found for episode: ${episodeId}`, 404)
+    throw new StoryboardServiceError(`Script not found for episode: ${episodeId}`, 404, 'SCRIPT_NOT_FOUND')
   }
 
   const [existingStoryboard] = await db
@@ -241,7 +242,7 @@ async function buildStoryboardAgentInput(
     .limit(1)
 
   if (existingStoryboard && request.force !== true) {
-    throw new StoryboardServiceError(`Episode already has storyboards: ${episodeId}`, 409)
+    throw new StoryboardServiceError(`Episode already has storyboards: ${episodeId}`, 409, 'STORYBOARD_EXISTS')
   }
 
   const characterRows = await db
@@ -266,14 +267,14 @@ async function buildStoryboardAgentInput(
     .orderBy(props.name)
 
   if (sceneRows.length === 0) {
-    throw new StoryboardServiceError(`Episode has no linked scenes: ${episodeId}`, 400)
+    throw new StoryboardServiceError(`Episode has no linked scenes: ${episodeId}`, 400, 'EPISODE_NO_SCENES')
   }
 
   // Characters are the anchor for cross-shot visual consistency: without at least one,
   // shots have no character reference to condition on and the model invents people. An
   // episode with zero characters almost always means asset extraction did not run.
   if (characterRows.length === 0) {
-    throw new StoryboardServiceError(`Episode has no linked characters: ${episodeId}`, 400)
+    throw new StoryboardServiceError(`Episode has no linked characters: ${episodeId}`, 400, 'EPISODE_NO_CHARACTERS')
   }
 
   const scriptStructuredJson = ScriptAgentOutputSchema.parse(JSON.parse(script.structuredJson))

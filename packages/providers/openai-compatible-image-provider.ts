@@ -18,6 +18,11 @@ export interface OpenAICompatibleImageProviderOptions {
    * resolution tier string (`1K`/`2K`/`4K`). Defaults to `pixels`.
    */
   sizeMode?: 'pixels' | 'tier'
+  /**
+   * Resolution tier used when `sizeMode` is `tier`. Lower tiers generate much
+   * faster (inference time dominates end-to-end latency). Defaults to `2K`.
+   */
+  sizeTier?: SeedreamSizeTier
 }
 
 type OpenAIImageSize = '256x256' | '512x512' | '1024x1024' | '1536x1024' | '1024x1536'
@@ -31,6 +36,7 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
   private readonly staticDir: string
   private readonly staticUrlBase: string
   private readonly sizeMode: 'pixels' | 'tier'
+  private readonly sizeTier: SeedreamSizeTier
 
   constructor(options: OpenAICompatibleImageProviderOptions) {
     this.model = options.model
@@ -38,6 +44,7 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     this.staticDir = options.staticDir
     this.staticUrlBase = (options.staticUrlBase ?? '/static').replace(/\/$/, '')
     this.sizeMode = options.sizeMode ?? 'pixels'
+    this.sizeTier = options.sizeTier ?? '2K'
   }
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
@@ -50,7 +57,18 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     // params. Verified against the configured proxy: it passes `image` through and
     // the model honors base64 data URIs. Omitted when there are no references, so
     // pure text-to-image is unchanged.
+    // Temporary timing instrumentation to locate the storyboard-frame bottleneck:
+    // reference encoding vs. model round-trip vs. download+write. Remove once diagnosed.
+    const timingTag = `[img-timing task=${String(request.metadata?.taskId ?? '?')} type=${String(request.metadata?.targetType ?? '?')}]`
+
+    const encodeStart = Date.now()
     const referenceImages = await this.resolveReferenceImages(request.referenceImages)
+    const encodeMs = Date.now() - encodeStart
+    const refBytes = referenceImages.reduce((sum, ref) => sum + ref.length, 0)
+    console.log(
+      `${timingTag} encode: ${referenceImages.length} refs, ~${(refBytes / 1024 / 1024).toFixed(2)}MB base64, ${encodeMs}ms`,
+    )
+
     const params: Record<string, unknown> = {
       model: this.model,
       prompt: this.buildPrompt(request),
@@ -61,21 +79,25 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
       params.image = referenceImages
     }
 
+    const requestStart = Date.now()
     const response = await this.client.images.generate(
       params as unknown as Parameters<OpenAI['images']['generate']>[0],
     )
+    console.log(`${timingTag} model round-trip (upload+inference): ${Date.now() - requestStart}ms`)
 
     const image = response.data?.[0]
     if (!image) {
       throw new Error(`OpenAICompatibleImageProvider received no image from model "${this.model}"`)
     }
 
+    const downloadStart = Date.now()
     const bytes = await this.resolveImageBytes(image)
     const targetType = String(request.metadata?.targetType ?? 'image')
     const filename = `${targetType}-${nanoid()}.png`
 
     await mkdir(this.staticDir, { recursive: true })
     await writeFile(path.join(this.staticDir, filename), bytes)
+    console.log(`${timingTag} download+write result image: ${Date.now() - downloadStart}ms`)
 
     return {
       imageUrl: `${this.staticUrlBase}/${filename}`,
@@ -142,7 +164,7 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     // Volcengine Ark Seedream expresses size as a resolution tier rather than
     // fixed pixel dimensions, and derives the aspect ratio from the prompt.
     if (this.sizeMode === 'tier') {
-      return '2K'
+      return this.sizeTier
     }
 
     const width = request.width

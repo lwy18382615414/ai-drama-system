@@ -68,6 +68,8 @@ interface ServiceLikeError {
   statusCode: number
   message: string
   data?: unknown
+  /** Optional machine-readable code the frontend maps to a friendly localized message. */
+  errorCode?: string
 }
 
 /**
@@ -95,7 +97,14 @@ export function handleServiceError(c: Context, error: unknown) {
     if (error.statusCode === 422) {
       return unprocessable(c, error.message, error.data ?? null)
     }
-    return fail(c, serviceErrorCode(error.statusCode), error.message)
+    // Surface a machine-readable errorCode (when the service set one) in `data` so the
+    // frontend can show a friendly localized message instead of the raw English text.
+    return fail(
+      c,
+      serviceErrorCode(error.statusCode),
+      error.message,
+      error.errorCode ? { errorCode: error.errorCode } : null,
+    )
   }
 
   return internalError(c, error)

@@ -33,7 +33,7 @@ export async function createApp() {
   // Database-backed task worker replaces in-request fire-and-forget: start* handlers only
   // enqueue a generation_tasks row and notify(); the worker claims, runs, retries, and
   // recovers pending/interrupted tasks on startup.
-  const worker = createTaskWorker({ db, provider, imageProvider })
+  const worker = createTaskWorker({ db, provider, imageProvider }, resolveWorkerOptions())
   worker.start()
 
   const app = new Hono()
@@ -103,6 +103,15 @@ function createImageProvider(): ImageProvider {
         ? 'tier'
         : 'pixels'
 
+  // Resolution tier for `sizeMode: 'tier'`. Lower tiers (1K) generate markedly
+  // faster since model inference dominates latency. Defaults to 2K.
+  const sizeTier =
+    process.env.IMAGE_PROVIDER_SIZE_TIER === '1K' ||
+    process.env.IMAGE_PROVIDER_SIZE_TIER === '2K' ||
+    process.env.IMAGE_PROVIDER_SIZE_TIER === '4K'
+      ? process.env.IMAGE_PROVIDER_SIZE_TIER
+      : '2K'
+
   return new OpenAICompatibleImageProvider({
     baseURL,
     apiKey,
@@ -110,5 +119,24 @@ function createImageProvider(): ImageProvider {
     staticDir: STATIC_DIR,
     staticUrlBase: STATIC_URL_BASE,
     sizeMode,
+    sizeTier,
   })
+}
+
+/**
+ * Task worker knobs from env. `TASK_WORKER_CONCURRENCY` bounds how many generation
+ * tasks (incl. storyboard frames) run at once — the main lever for batch image
+ * throughput, since each Seedream frame takes tens of seconds. Falls back to the
+ * worker's own defaults when unset/invalid.
+ */
+function resolveWorkerOptions() {
+  const options: { concurrency?: number } = {}
+  const raw = process.env.TASK_WORKER_CONCURRENCY
+  if (raw !== undefined) {
+    const parsed = Number.parseInt(raw, 10)
+    if (Number.isInteger(parsed) && parsed > 0) {
+      options.concurrency = parsed
+    }
+  }
+  return options
 }

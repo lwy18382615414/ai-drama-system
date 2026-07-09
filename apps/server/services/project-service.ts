@@ -190,6 +190,26 @@ export interface ProjectDetail extends ProjectSummary {
   batchCount: number
   extractedChapterCount: number
   plannedChapterEndNo: number
+  /** Episodes that have both scene and character assets extracted — the "资产" stage denominator. */
+  assetsExtractedEpisodeCount: number
+}
+
+/** Counts episodes that have at least one valid scene link AND one valid character link. */
+async function countEpisodesWithAssets(db: DatabaseClient, projectId: string): Promise<number> {
+  const [sceneEpisodes, characterEpisodes] = await Promise.all([
+    db
+      .selectDistinct({ episodeId: episodeSceneLinks.episodeId })
+      .from(episodeSceneLinks)
+      .innerJoin(scenes, eq(episodeSceneLinks.sceneId, scenes.id))
+      .where(eq(scenes.projectId, projectId)),
+    db
+      .selectDistinct({ episodeId: episodeCharacterLinks.episodeId })
+      .from(episodeCharacterLinks)
+      .innerJoin(characters, eq(episodeCharacterLinks.characterId, characters.id))
+      .where(eq(characters.projectId, projectId)),
+  ])
+  const withScene = new Set(sceneEpisodes.map((r) => r.episodeId))
+  return characterEpisodes.filter((r) => withScene.has(r.episodeId)).length
 }
 
 async function countFor(builder: () => Promise<{ count: unknown }[]>): Promise<number> {
@@ -310,6 +330,8 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     ),
   ])
 
+  const assetsExtractedEpisodeCount = await countEpisodesWithAssets(db, projectId)
+
   return {
     ...project,
     chapterCount,
@@ -325,6 +347,7 @@ export async function getProjectDetail(db: DatabaseClient, projectId: string): P
     batchCount,
     extractedChapterCount,
     plannedChapterEndNo,
+    assetsExtractedEpisodeCount,
     imageCompletion: imageCompletion(completedImages, characterCount, sceneCount, storyboardCount),
   }
 }

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod/v4";
 import type {
@@ -7,12 +7,17 @@ import type {
 } from "../../../packages/database/index.js";
 import {
   batches,
+  characters,
+  episodeCharacterLinks,
   episodeEventLinks,
+  episodeSceneLinks,
   episodes,
   generationTasks,
   novelChapters,
   novelEvents,
   projects,
+  scenes,
+  storyboards,
 } from "../../../packages/database/index.js";
 import {
   EpisodePlannerOptionsSchema,
@@ -250,11 +255,80 @@ export async function getProjectEpisodes(
     return null;
   }
 
-  return db
+  const rows = await db
     .select()
     .from(episodes)
     .where(eq(episodes.projectId, projectId))
     .orderBy(episodes.episodeNo);
+
+  return withPipelineCounts(db, rows);
+}
+
+/**
+ * Per-episode pipeline readiness counts, powering the frontend step indicator.
+ * Scene/character counts use inner joins so links pointing at deleted assets don't
+ * count. Batched (one query per relation) to avoid N+1 across the episode list.
+ */
+export interface EpisodePipelineCounts {
+  sceneLinkCount: number;
+  characterLinkCount: number;
+  storyboardCount: number;
+  firstFrameDoneCount: number;
+}
+
+async function withPipelineCounts<T extends { id: string }>(
+  db: DatabaseClient,
+  rows: T[],
+): Promise<Array<T & EpisodePipelineCounts>> {
+  const episodeIds = rows.map((row) => row.id);
+  if (episodeIds.length === 0) {
+    return [];
+  }
+
+  const [sceneLinks, characterLinks, shots] = await Promise.all([
+    db
+      .select({ episodeId: episodeSceneLinks.episodeId })
+      .from(episodeSceneLinks)
+      .innerJoin(scenes, eq(episodeSceneLinks.sceneId, scenes.id))
+      .where(inArray(episodeSceneLinks.episodeId, episodeIds)),
+    db
+      .select({ episodeId: episodeCharacterLinks.episodeId })
+      .from(episodeCharacterLinks)
+      .innerJoin(characters, eq(episodeCharacterLinks.characterId, characters.id))
+      .where(inArray(episodeCharacterLinks.episodeId, episodeIds)),
+    db
+      .select({
+        episodeId: storyboards.episodeId,
+        firstFrameImageUrl: storyboards.firstFrameImageUrl,
+      })
+      .from(storyboards)
+      .where(inArray(storyboards.episodeId, episodeIds)),
+  ]);
+
+  const sceneCount = tally(sceneLinks, (r) => r.episodeId);
+  const characterCount = tally(characterLinks, (r) => r.episodeId);
+  const storyboardCount = tally(shots, (r) => r.episodeId);
+  const firstFrameCount = tally(
+    shots.filter((r) => Boolean(r.firstFrameImageUrl)),
+    (r) => r.episodeId,
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    sceneLinkCount: sceneCount.get(row.id) ?? 0,
+    characterLinkCount: characterCount.get(row.id) ?? 0,
+    storyboardCount: storyboardCount.get(row.id) ?? 0,
+    firstFrameDoneCount: firstFrameCount.get(row.id) ?? 0,
+  }));
+}
+
+function tally<T>(items: T[], key: (item: T) => string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const k = key(item);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return counts;
 }
 
 export async function getEpisodeEvents(db: DatabaseClient, episodeId: string) {

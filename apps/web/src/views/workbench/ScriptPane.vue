@@ -117,10 +117,11 @@
           本集暂无关联事件
         </p>
 
-        <div class="sec">资产</div>
-        <button class="btn blk" :disabled="!script || busy" @click="extractAssets">
-          提取角色/场景/道具
-        </button>
+        <EpisodePipeline
+          :episode="activeEpisode"
+          @navigate="$emit('navigate', $event)"
+          @changed="refreshAfterScript"
+        />
       </template>
       <p v-else class="fval" style="color: #9a9da4; padding: 20px 0; text-align: center">
         选择左侧剧集查看信息
@@ -135,8 +136,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { workbenchApi } from '@/api'
 import type { Batch, Chapter, Episode, EpisodeEventLink, Script } from '@/api/workbench'
 import { useTaskStream } from '@/composables/useTaskStream'
+import EpisodePipeline from './EpisodePipeline.vue'
 
 const props = defineProps<{ projectId: string; inspOn: boolean }>()
+defineEmits<{ (e: 'navigate', tab: 'script' | 'assets' | 'board'): void }>()
 
 const { tasks: streamTasks } = useTaskStream(toRef(props, 'projectId'))
 
@@ -292,18 +295,6 @@ async function regenerate() {
   await generate()
 }
 
-async function extractAssets() {
-  const ep = activeEpisode.value
-  if (!ep) return
-  busy.value = true
-  try {
-    await workbenchApi.extractAssets(ep.id)
-    ElMessage.success('已提交资产提取任务')
-  } finally {
-    busy.value = false
-  }
-}
-
 // Refresh batches + episodes whenever an episode_planning task completes.
 watch(
   () =>
@@ -323,6 +314,17 @@ watch(
 watch(
   () =>
     streamTasks.value.filter((t) => t.taskType === 'script_generation' && t.status === 'completed')
+      .length,
+  (now, prev) => {
+    if (now > (prev ?? 0)) refreshAfterScript()
+  },
+)
+
+// Refresh the episode list whenever an asset-extraction task completes, so the
+// pipeline stepper's 资产 step flips to done without a manual reload.
+watch(
+  () =>
+    streamTasks.value.filter((t) => t.taskType === 'asset_extraction' && t.status === 'completed')
       .length,
   (now, prev) => {
     if (now > (prev ?? 0)) refreshAfterScript()

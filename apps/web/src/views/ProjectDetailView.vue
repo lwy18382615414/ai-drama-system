@@ -69,7 +69,12 @@
 
       <!-- Active pane -->
       <keep-alive>
-        <component :is="activePane" :project-id="projectId" :insp-on="inspOn" />
+        <component
+          :is="activePane"
+          :project-id="projectId"
+          :insp-on="inspOn"
+          @navigate="mode = $event"
+        />
       </keep-alive>
     </div>
 
@@ -111,20 +116,21 @@ const activePane = computed(() => PANES[mode.value])
 
 const tabs = computed(() => {
   const p = project.value
+  // Tab order follows the production pipeline: 小说 → 剧本 → 资产(提取) → 分镜(+出图).
   return [
     { key: 'novel' as Mode, label: '小说', dot: false, dotCls: '' },
     { key: 'script' as Mode, label: '剧本', dot: false, dotCls: '' },
-    {
-      key: 'board' as Mode,
-      label: '分镜',
-      dot: !!p && p.storyboardEpisodeCount < p.episodeCount,
-      dotCls: 'run',
-    },
     {
       key: 'assets' as Mode,
       label: '资产',
       dot: !!p && p.imageCompletion >= 100 && p.imageCompletion > 0,
       dotCls: 'ok',
+    },
+    {
+      key: 'board' as Mode,
+      label: '分镜',
+      dot: !!p && p.storyboardEpisodeCount < p.episodeCount,
+      dotCls: 'run',
     },
   ]
 })
@@ -171,6 +177,8 @@ const guide = computed(() => {
     return { cls: '', icon: '💡', text: '下一步 · 尚未规划剧集', action: { tab: 'script' as Mode, label: '前往剧本' } }
   if (p.scriptCount < p.episodeCount)
     return { cls: '', icon: '💡', text: `下一步 · 还有 ${p.episodeCount - p.scriptCount} 集尚无剧本`, action: { tab: 'script' as Mode, label: '生成剧本 →' } }
+  if (p.assetsExtractedEpisodeCount < p.episodeCount)
+    return { cls: '', icon: '💡', text: `下一步 · 还有 ${p.episodeCount - p.assetsExtractedEpisodeCount} 集尚未提取角色/场景资产`, action: { tab: 'script' as Mode, label: '提取资产 →' } }
   if (p.storyboardEpisodeCount < p.episodeCount)
     return { cls: '', icon: '💡', text: `下一步 · 还有 ${p.episodeCount - p.storyboardEpisodeCount} 集尚无分镜`, action: { tab: 'board' as Mode, label: '生成分镜 →' } }
   if (p.imageCompletion < 100)

@@ -6,6 +6,7 @@ import axios, {
 } from 'axios'
 import { ElMessage } from 'element-plus'
 import { ApiCode, ApiError, type ApiResponse } from './types'
+import { friendlyErrorMessage } from './error-messages'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
 
@@ -42,7 +43,10 @@ http.interceptors.response.use(
       return response
     }
     if (body.code !== ApiCode.Ok) {
-      const error = new ApiError(body.message || '请求失败', body.code, response.status, body.data)
+      // Prefer a friendly localized message when the backend tagged the error with a
+      // machine-readable errorCode; otherwise fall back to the raw backend message.
+      const message = friendlyErrorMessage(body.data) ?? body.message ?? '请求失败'
+      const error = new ApiError(message, body.code, response.status, body.data)
       if (shouldToast(response.config)) ElMessage.error(error.message)
       return Promise.reject(error)
     }

@@ -31,6 +31,7 @@ export interface ProjectDetail extends ProjectSummary {
   batchCount: number
   extractedChapterCount: number
   plannedChapterEndNo: number
+  assetsExtractedEpisodeCount: number
 }
 
 export interface CreateProjectRequest {

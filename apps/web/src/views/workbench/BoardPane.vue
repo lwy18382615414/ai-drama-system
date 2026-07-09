@@ -112,12 +112,18 @@
 
     <!-- Inspector -->
     <aside v-if="inspOn" class="insp">
+      <EpisodePipeline
+        v-if="activeEpisode"
+        :episode="activeEpisode"
+        @navigate="$emit('navigate', $event)"
+        @changed="refreshEpisodeCounts"
+      />
       <template v-if="activeShot">
         <p class="ihead">
           镜头 {{ String(activeShot.shotNo).padStart(2, "0") }}
         </p>
         <p class="ititle">{{ activeShot.action }}</p>
-        <div style="display: flex; gap: 8px; margin: 8px 0">
+        <div style="display: flex; flex-direction: column; gap: 8px; margin: 8px 0">
           <span class="chip">{{ activeShot.shotType }}</span>
           <span v-if="activeShot.cameraMovement" class="chip">{{
             activeShot.cameraMovement
@@ -179,8 +185,10 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { assetUrl, workbenchApi } from "@/api";
 import type { Episode, Storyboard } from "@/api/workbench";
 import { useTaskStream } from "@/composables/useTaskStream";
+import EpisodePipeline from "./EpisodePipeline.vue";
 
 const props = defineProps<{ projectId: string; inspOn: boolean }>();
+defineEmits<{ (e: "navigate", tab: "script" | "assets" | "board"): void }>();
 
 const episodes = ref<Episode[]>([]);
 const loading = ref(false);
@@ -339,6 +347,14 @@ async function loadEpisodes() {
   }
 }
 
+// Reload the episode list in place (updates the pipeline stepper's per-episode counts)
+// WITHOUT resetting the current selection or reloading shots — used after a step is
+// enqueued or a relevant task completes.
+async function refreshEpisodeCounts() {
+  const { episodes: rows } = await workbenchApi.getEpisodes(props.projectId);
+  episodes.value = rows;
+}
+
 async function selectEpisode(i: number) {
   activeIdx.value = i;
   activeShotIdx.value = 0;
@@ -381,8 +397,27 @@ async function generateFrame() {
 }
 
 watch(completedFrameCount, (n, prev) => {
-  if (n > (prev ?? 0)) void reloadShots();
+  if (n > (prev ?? 0)) {
+    void reloadShots();
+    // Frame count changed → the pipeline's 出图 step progress needs refreshing.
+    void refreshEpisodeCounts();
+  }
 });
+
+// A storyboard-generation task completing flips the pipeline's 分镜 step to done and
+// populates the board; refresh both without disturbing the current selection.
+watch(
+  () =>
+    tasks.value.filter(
+      (t) => t.taskType === "storyboard_generation" && t.status === "completed",
+    ).length,
+  (n, prev) => {
+    if (n > (prev ?? 0)) {
+      void refreshEpisodeCounts();
+      void reloadShots();
+    }
+  },
+);
 
 watch(() => props.projectId, loadEpisodes, { immediate: true });
 </script>
@@ -499,8 +534,7 @@ watch(() => props.projectId, loadEpisodes, { immediate: true });
   margin: 20px 0 8px;
 }
 .chip {
-  display: inline-flex;
-  align-items: center;
+  width: fit-content;
   font-size: 11px;
   padding: 2px 9px;
   border-radius: 99px;

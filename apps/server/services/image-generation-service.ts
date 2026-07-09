@@ -118,6 +118,7 @@ export class ImageGenerationServiceError extends Error {
   constructor(
     message: string,
     readonly statusCode: number,
+    readonly errorCode?: string,
   ) {
     super(message)
   }
@@ -227,7 +228,11 @@ export async function startImageGeneration(
 
   if (request.force !== true) {
     if (target.existingUrl) {
-      throw new ImageGenerationServiceError(`Target already has generated image: ${target.targetId}`, 409)
+      throw new ImageGenerationServiceError(
+        `Target already has generated image: ${target.targetId}`,
+        409,
+        'TARGET_IMAGE_EXISTS',
+      )
     }
 
     const [existingAsset] = await deps.db
@@ -244,7 +249,11 @@ export async function startImageGeneration(
       .limit(1)
 
     if (existingAsset) {
-      throw new ImageGenerationServiceError(`Target already has active image asset: ${target.targetId}`, 409)
+      throw new ImageGenerationServiceError(
+        `Target already has active image asset: ${target.targetId}`,
+        409,
+        'TARGET_IMAGE_EXISTS',
+      )
     }
   }
 
@@ -825,7 +834,13 @@ export async function executeImageGeneration(
         taskId: input.taskId,
       },
     }
+    // Temporary: overall provider call duration to compare against the per-phase
+    // breakdown logged inside the provider. Remove once the bottleneck is diagnosed.
+    const genStart = Date.now()
     const providerResult = await deps.imageProvider.generateImage(providerRequest)
+    console.log(
+      `[img-timing task=${input.taskId} type=${input.targetType}] generateImage total: ${Date.now() - genStart}ms`,
+    )
     const completedAt = new Date().toISOString()
     const assetId = nanoid()
     const output = {
