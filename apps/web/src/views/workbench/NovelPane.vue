@@ -53,10 +53,19 @@
           :disabled="!selectable(c)"
           @click.stop="toggleSelect(c)"
         />
-        {{ c.title || `第${c.chapterNo}章` }}
+        <span class="rtitle">{{ c.title || `第${c.chapterNo}章` }}</span>
         <span v-if="selectMode && rowHint(c)" class="hint">{{ rowHint(c) }}</span>
-        <span v-else-if="c.status === 'event_extracted'" class="tick">✓</span>
         <span v-else-if="c.status === 'event_extracting'" class="spin"></span>
+        <template v-else-if="!selectMode">
+          <span
+            v-if="selectable(c)"
+            class="del"
+            title="删除本章"
+            @click.stop="deleteChapter(c)"
+          >✕</span>
+          <span v-else-if="c.status === 'event_extracted'" class="tick">✓</span>
+        </template>
+        <span v-else-if="c.status === 'event_extracted'" class="tick">✓</span>
       </button>
       <div v-if="!loading && chapters.length === 0" class="empty" style="padding: 30px 12px">
         <span class="emptyti">暂无章节</span>
@@ -429,6 +438,31 @@ function reportBatchExtraction(taskCount: number, skippedCount: number) {
   }
 }
 
+async function deleteChapter(chapter: Chapter) {
+  if (busy.value || !selectable(chapter)) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${chapter.title || `第${chapter.chapterNo}章`}」?章节及其已提取事件将被删除,后续章节编号自动前移。`,
+      '删除章节',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  const removedIdx = chapters.value.findIndex((c) => c.id === chapter.id)
+  busy.value = true
+  try {
+    await workbenchApi.deleteChapters(props.projectId, [chapter.id])
+    ElMessage.success('已删除本章')
+    if (removedIdx >= 0 && removedIdx <= activeIdx.value) {
+      activeIdx.value = Math.max(0, activeIdx.value - 1)
+    }
+    await loadChapters()
+  } finally {
+    busy.value = false
+  }
+}
+
 async function deleteSelected() {
   const ids = [...selectedIds.value]
   if (!ids.length) return
@@ -520,10 +554,36 @@ watch(() => props.projectId, loadChapters, { immediate: true })
   font-weight: 600;
   color: #1f2126;
 }
+.rtitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tick {
   color: #1a9e5c;
   font-size: 11px;
-  margin-left: auto;
+  flex: none;
+}
+.del {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #b0323b;
+  font-size: 12px;
+  line-height: 1;
+}
+.trow:hover .del {
+  display: inline-flex;
+}
+.del:hover {
+  background: #f7e2e0;
+  color: #c2372b;
 }
 .spin {
   width: 11px;
@@ -628,10 +688,17 @@ watch(() => props.projectId, loadChapters, { immediate: true })
   max-width: 660px;
   margin: 0 auto;
 }
+.phd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 18px;
+}
 .ptitle {
   font-size: 18px;
   font-weight: 700;
-  margin: 0 0 18px;
+  margin: 0;
 }
 .para {
   font-size: 14.5px;
@@ -735,6 +802,14 @@ watch(() => props.projectId, loadChapters, { immediate: true })
 .mini[disabled] {
   cursor: not-allowed;
   opacity: 0.55;
+}
+.mini.danger {
+  color: #c2372b;
+  border-color: #e5c2bd;
+}
+.mini.danger:hover:not([disabled]) {
+  background: #fbf1ef;
+  border-color: #c2372b;
 }
 .mini.blk {
   width: 100%;
