@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createDatabase, initializeDatabase } from '../../packages/database/index.js'
 import {
+  OpenAICompatibleChatImageProvider,
   OpenAICompatibleImageProvider,
   OpenAICompatibleTextProvider,
   type ImageProvider,
@@ -93,6 +94,28 @@ function createImageProvider(): ImageProvider {
   }
 
   const model = process.env.IMAGE_PROVIDER_MODEL ?? 'gpt-image-2'
+
+  // Some models generate images through chat/completions rather than the OpenAI
+  // images endpoint — notably Gemini image models ("nano banana", e.g.
+  // `gemini-3.1-flash-image`), which return the image on `message.images[]`.
+  // Auto-detect by model name, overridable via IMAGE_PROVIDER_TRANSPORT.
+  const transport =
+    process.env.IMAGE_PROVIDER_TRANSPORT === 'chat' || process.env.IMAGE_PROVIDER_TRANSPORT === 'images'
+      ? process.env.IMAGE_PROVIDER_TRANSPORT
+      : /gemini.*image|flash-image|nano.?banana/i.test(model)
+        ? 'chat'
+        : 'images'
+
+  if (transport === 'chat') {
+    return new OpenAICompatibleChatImageProvider({
+      baseURL,
+      apiKey,
+      model,
+      staticDir: STATIC_DIR,
+      staticUrlBase: STATIC_URL_BASE,
+    })
+  }
+
   // Volcengine Ark Seedream models take a resolution tier (`2K`) as `size`
   // instead of pixel dimensions. Auto-detect by model name, overridable via env.
   const sizeMode =

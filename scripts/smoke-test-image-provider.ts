@@ -1,6 +1,10 @@
 import { access } from 'node:fs/promises'
 import path from 'node:path'
-import { OpenAICompatibleImageProvider } from '../packages/providers/index.js'
+import {
+  OpenAICompatibleChatImageProvider,
+  OpenAICompatibleImageProvider,
+  type ImageProvider,
+} from '../packages/providers/index.js'
 
 async function main() {
   const apiKey = process.env.IMAGE_PROVIDER_API_KEY
@@ -18,14 +22,24 @@ async function main() {
       : /seedream|seededit/i.test(model)
         ? 'tier'
         : 'pixels'
-  const provider = new OpenAICompatibleImageProvider({
-    baseURL,
-    apiKey,
-    model,
-    staticDir,
-    staticUrlBase: '/static',
-    sizeMode,
-  })
+  const transport =
+    process.env.IMAGE_PROVIDER_TRANSPORT === 'chat' || process.env.IMAGE_PROVIDER_TRANSPORT === 'images'
+      ? process.env.IMAGE_PROVIDER_TRANSPORT
+      : /gemini.*image|flash-image|nano.?banana/i.test(model)
+        ? 'chat'
+        : 'images'
+
+  const provider: ImageProvider =
+    transport === 'chat'
+      ? new OpenAICompatibleChatImageProvider({ baseURL, apiKey, model, staticDir, staticUrlBase: '/static' })
+      : new OpenAICompatibleImageProvider({
+          baseURL,
+          apiKey,
+          model,
+          staticDir,
+          staticUrlBase: '/static',
+          sizeMode,
+        })
 
   const result = await provider.generateImage({
     prompt:
