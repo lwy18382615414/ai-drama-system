@@ -287,9 +287,11 @@ describe('episode batch image generation routes', () => {
 
   it('generate-all-images runs characters and scenes before storyboard first frames', async () => {
     let storyboardPrompt: string | undefined
+    let storyboardReferenceImages: string[] | undefined
     const { app } = await createTestApp((request) => {
       if (request.metadata?.targetType === 'storyboard_first_frame') {
         storyboardPrompt = request.prompt
+        storyboardReferenceImages = request.referenceImages
       }
       return `/static/mock-images/${String(request.metadata?.targetId)}.png`
     })
@@ -305,9 +307,13 @@ describe('episode batch image generation routes', () => {
     expect(body.scenes.summary.completed).toBe(1)
     expect(body.storyboardFirstFrames.summary.completed).toBe(1)
 
-    // Because characters/scenes ran first, the storyboard prompt references their generated urls.
-    expect(storyboardPrompt).toContain('Character reference image: /static/mock-images/character-1.png')
-    expect(storyboardPrompt).toContain('Scene reference image: /static/mock-images/scene-1.png')
+    // Because characters/scenes ran first, the shot's referenced assets have images, and
+    // those images are passed to the model as reference pixels (not as prompt text).
+    expect(storyboardReferenceImages).toContain('/static/mock-images/character-1.png')
+    expect(storyboardReferenceImages).toContain('/static/mock-images/scene-1.png')
+    // The prompt keeps the named-subject labels but no longer embeds the useless URL text.
+    expect(storyboardPrompt).toContain('Character: 林薇')
+    expect(storyboardPrompt).not.toContain('reference image: /static/')
   })
 
   it('reports image generation status with total/completed/missing/failed', async () => {

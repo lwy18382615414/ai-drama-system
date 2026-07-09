@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { nanoid } from 'nanoid'
 import { OpenAI } from 'openai'
@@ -44,12 +44,26 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     // Seedream reports resolution tiers (`2K`) that fall outside the OpenAI SDK's
     // `size` literal union, so cast through the SDK's expected type.
     const size = this.resolveSize(request) as unknown as OpenAIImageSize
-    const response = await this.client.images.generate({
+
+    // Reference images drive Seedream subject/scene consistency. They ride on a
+    // non-standard `image` field the OpenAI SDK doesn't type, so we widen the
+    // params. Verified against the configured proxy: it passes `image` through and
+    // the model honors base64 data URIs. Omitted when there are no references, so
+    // pure text-to-image is unchanged.
+    const referenceImages = await this.resolveReferenceImages(request.referenceImages)
+    const params: Record<string, unknown> = {
       model: this.model,
       prompt: this.buildPrompt(request),
       size,
       n: 1,
-    })
+    }
+    if (referenceImages.length > 0) {
+      params.image = referenceImages
+    }
+
+    const response = await this.client.images.generate(
+      params as unknown as Parameters<OpenAI['images']['generate']>[0],
+    )
 
     const image = response.data?.[0]
     if (!image) {
@@ -86,6 +100,44 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     return parts.join('\n')
   }
 
+  /**
+   * Resolves each reference to a base64 data URI so the model receives the pixels
+   * directly — no public hosting of `staticDir` required. Accepts served asset URLs
+   * (`/static/x.png`), absolute local paths, and remote `http(s)` URLs.
+   */
+  private async resolveReferenceImages(references?: string[]): Promise<string[]> {
+    if (!references || references.length === 0) {
+      return []
+    }
+
+    const resolved: string[] = []
+    for (const ref of references) {
+      if (ref.startsWith('data:')) {
+        resolved.push(ref)
+        continue
+      }
+
+      let bytes: Buffer
+      if (ref.startsWith('http://') || ref.startsWith('https://')) {
+        const res = await fetch(ref)
+        if (!res.ok) {
+          throw new Error(`Failed to fetch reference image "${ref}": HTTP ${res.status}`)
+        }
+        bytes = Buffer.from(await res.arrayBuffer())
+      } else {
+        // `/static/x.png` (served URL) → `staticDir/x.png`; otherwise treat as a path.
+        const filePath = ref.startsWith(`${this.staticUrlBase}/`)
+          ? path.join(this.staticDir, ref.slice(this.staticUrlBase.length + 1))
+          : ref
+        bytes = await readFile(filePath)
+      }
+
+      resolved.push(`data:${mimeTypeForPath(ref)};base64,${bytes.toString('base64')}`)
+    }
+
+    return resolved
+  }
+
   private resolveSize(request: ImageGenerationRequest): OpenAIImageSize | SeedreamSizeTier {
     // Volcengine Ark Seedream expresses size as a resolution tier rather than
     // fixed pixel dimensions, and derives the aspect ratio from the prompt.
@@ -118,5 +170,20 @@ export class OpenAICompatibleImageProvider implements ImageProvider {
     }
 
     throw new Error('OpenAICompatibleImageProvider image response contained neither b64_json nor url')
+  }
+}
+
+function mimeTypeForPath(ref: string): string {
+  const ext = path.extname(ref.split('?')[0]).toLowerCase()
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.webp':
+      return 'image/webp'
+    case '.gif':
+      return 'image/gif'
+    default:
+      return 'image/png'
   }
 }

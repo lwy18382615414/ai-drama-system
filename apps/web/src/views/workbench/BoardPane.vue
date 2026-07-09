@@ -27,13 +27,54 @@
         <span class="emptyti">加载分镜…</span>
       </div>
       <template v-else-if="shots.length">
+        <div class="boardft">
+          <template v-if="selecting">
+            <span>已选 {{ selectedIds.size }} / {{ shots.length }}</span>
+            <button class="btn" @click="selectAll">全选</button>
+            <button
+              class="btn pri"
+              style="margin-left: auto"
+              :disabled="busy || selectedIds.size === 0"
+              @click="generateSelected"
+            >
+              生成选中({{ selectedIds.size }})
+            </button>
+            <button class="btn" :disabled="busy" @click="toggleSelecting">
+              退出多选
+            </button>
+          </template>
+          <template v-else>
+            <span>{{ boardSummary }}</span>
+            <button
+              class="btn pri"
+              style="margin-left: auto"
+              :disabled="busy || missingCount === 0"
+              @click="generateMissing"
+            >
+              生成全部缺失({{ missingCount }})
+            </button>
+            <button class="btn" :disabled="busy" @click="toggleSelecting">
+              多选
+            </button>
+            <button class="btn" :disabled="busy" @click="regenerate">
+              重新生成分镜
+            </button>
+          </template>
+        </div>
         <div class="shotgrid">
           <button
             v-for="(s, i) in shots"
             :key="s.id"
-            :class="['shot', i === activeShotIdx ? 'on' : '']"
-            @click="activeShotIdx = i"
+            :class="[
+              'shot',
+              !selecting && i === activeShotIdx ? 'on' : '',
+              selecting && selectedIds.has(s.id) ? 'sel' : '',
+            ]"
+            @click="selecting ? toggleSelect(s.id) : (activeShotIdx = i)"
           >
+            <span v-if="selecting" class="selbox">{{
+              selectedIds.has(s.id) ? "☑" : "☐"
+            }}</span>
             <div
               v-if="s.firstFrameImageUrl"
               class="thumb"
@@ -54,17 +95,6 @@
                 s.firstFrameImageUrl ? "✓" : ""
               }}</span>
             </div>
-          </button>
-        </div>
-        <div class="boardft">
-          <span>{{ boardSummary }}</span>
-          <button
-            class="btn pri"
-            style="margin-left: auto"
-            :disabled="busy"
-            @click="regenerate"
-          >
-            🔁 重新生成分镜
           </button>
         </div>
       </template>
@@ -93,6 +123,18 @@
             activeShot.cameraMovement
           }}</span>
         </div>
+        <el-image
+          v-if="activeShot.firstFrameImageUrl"
+          class="frame"
+          :src="assetUrl(activeShot.firstFrameImageUrl)"
+          :preview-src-list="previewList"
+          :initial-index="previewIndex"
+          fit="cover"
+          preview-teleported
+        />
+        <div v-else class="frame thumb none">
+          {{ isGenerating(activeShot) ? "生成中" : "待出图" }}
+        </div>
         <div class="frow">
           <span class="flabel">时长</span
           ><span class="fval">{{ activeShot.duration }}s</span>
@@ -117,7 +159,7 @@
         <div class="pblock mono">{{ activeShot.imagePrompt }}</div>
         <div class="sec">操作</div>
         <button class="btn blk pri" :disabled="busy" @click="generateFrame">
-          🎨 生成本镜首帧图
+          生成本镜首帧图
         </button>
       </template>
       <p
@@ -133,7 +175,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRef, watch } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { assetUrl, workbenchApi } from "@/api";
 import type { Episode, Storyboard } from "@/api/workbench";
 import { useTaskStream } from "@/composables/useTaskStream";
@@ -149,6 +191,11 @@ const boardLoading = ref(false);
 const activeShotIdx = ref(0);
 const busy = ref(false);
 
+// Multi-select batch mode: while on, clicking a shot toggles its checkbox
+// instead of opening it in the inspector.
+const selecting = ref(false);
+const selectedIds = ref<Set<string>>(new Set());
+
 // Live task stream (shared per-project via the hook registry) lets shots
 // mid-generation show a spinner.
 const { tasks } = useTaskStream(toRef(props, "projectId"));
@@ -160,11 +207,46 @@ const episodeTitle = computed(
 );
 const activeShot = computed(() => shots.value[activeShotIdx.value] ?? null);
 
+// Whole-pane preview: arrow through every shot in this episode that has a first
+// frame, in shot order. Imageless shots are excluded, so the selected shot's
+// position is looked up by its resolved URL.
+const previewList = computed(() =>
+  shots.value
+    .filter((s) => s.firstFrameImageUrl)
+    .map((s) => assetUrl(s.firstFrameImageUrl!)),
+);
+const previewIndex = computed(() => {
+  const url = activeShot.value?.firstFrameImageUrl;
+  if (!url) return 0;
+  return Math.max(0, previewList.value.indexOf(assetUrl(url)));
+});
+
 const boardSummary = computed(() => {
   const total = shots.value.length;
   const done = shots.value.filter((s) => s.firstFrameImageUrl).length;
   return `${total} 个镜头 · ${done} 已出图 · ${total - done} 待出图`;
 });
+
+// Shots eligible for the one-click "generate all missing": no image yet and not
+// already generating (so the count matches what the batch will actually enqueue).
+const missingCount = computed(
+  () =>
+    shots.value.filter((s) => !s.firstFrameImageUrl && !isGenerating(s)).length,
+);
+
+// Reloads shots when an image task for this episode completes, so freshly generated
+// thumbnails appear without switching episodes. Index-based selection stays valid
+// because batch generation never changes the shot count.
+const completedFrameCount = computed(
+  () =>
+    tasks.value.filter(
+      (t) =>
+        t.taskType === "image_generation" &&
+        t.storyboardId != null &&
+        t.episodeId === activeEpisode.value?.id &&
+        t.status === "completed",
+    ).length,
+);
 
 function isGenerating(shot: Storyboard): boolean {
   return tasks.value.some(
@@ -172,6 +254,78 @@ function isGenerating(shot: Storyboard): boolean {
       t.storyboardId === shot.id &&
       (t.status === "pending" || t.status === "running"),
   );
+}
+
+function toggleSelecting() {
+  selecting.value = !selecting.value;
+  if (!selecting.value) selectedIds.value = new Set();
+}
+
+function toggleSelect(id: string) {
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedIds.value = next;
+}
+
+function selectAll() {
+  selectedIds.value = new Set(shots.value.map((s) => s.id));
+}
+
+async function reloadShots() {
+  const ep = activeEpisode.value;
+  if (!ep) return;
+  const { storyboards } = await workbenchApi.getEpisodeStoryboards(ep.id);
+  shots.value = storyboards;
+}
+
+// Generate every shot still missing a first frame (skips existing, force=false).
+async function generateMissing() {
+  const ep = activeEpisode.value;
+  if (!ep) return;
+  busy.value = true;
+  try {
+    const res = await workbenchApi.generateEpisodeStoryboardFirstFrames(ep.id);
+    ElMessage.success(
+      `已排队 ${res.queued.length} 个,跳过 ${res.skipped.length} 个`,
+    );
+  } finally {
+    busy.value = false;
+  }
+}
+
+// Regenerate the selected shots (force=true — overwrites existing images).
+async function generateSelected() {
+  const ep = activeEpisode.value;
+  if (!ep || selectedIds.value.size === 0) return;
+  const ids = [...selectedIds.value];
+  const withImage = ids.filter(
+    (id) => shots.value.find((s) => s.id === id)?.firstFrameImageUrl,
+  ).length;
+  try {
+    await ElMessageBox.confirm(
+      withImage > 0
+        ? `将为选中的 ${ids.length} 个镜头生成首帧,其中 ${withImage} 个已出图将被覆盖。继续?`
+        : `将为选中的 ${ids.length} 个镜头生成首帧。继续?`,
+      "批量生成首帧",
+      { type: "warning", confirmButtonText: "生成", cancelButtonText: "取消" },
+    );
+  } catch {
+    return;
+  }
+  busy.value = true;
+  try {
+    const res = await workbenchApi.generateEpisodeStoryboardFirstFrames(ep.id, {
+      storyboardIds: ids,
+      force: true,
+    });
+    ElMessage.success(
+      `已排队 ${res.queued.length} 个,跳过 ${res.skipped.length} 个`,
+    );
+    toggleSelecting();
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function loadEpisodes() {
@@ -188,6 +342,8 @@ async function loadEpisodes() {
 async function selectEpisode(i: number) {
   activeIdx.value = i;
   activeShotIdx.value = 0;
+  selecting.value = false;
+  selectedIds.value = new Set();
   const ep = episodes.value[i];
   if (!ep) return;
   boardLoading.value = true;
@@ -223,6 +379,10 @@ async function generateFrame() {
     busy.value = false;
   }
 }
+
+watch(completedFrameCount, (n, prev) => {
+  if (n > (prev ?? 0)) void reloadShots();
+});
 
 watch(() => props.projectId, loadEpisodes, { immediate: true });
 </script>
@@ -422,6 +582,7 @@ watch(() => props.projectId, loadEpisodes, { immediate: true });
   padding: 24px 26px 10px;
 }
 .shot {
+  position: relative;
   background: #fff;
   border: 1px solid #e8e7e3;
   border-radius: 8px;
@@ -435,11 +596,45 @@ watch(() => props.projectId, loadEpisodes, { immediate: true });
   border-color: #cf6134;
   box-shadow: 0 0 0 1px #cf6134;
 }
+.shot.sel {
+  border-color: #cf6134;
+  box-shadow: 0 0 0 1px #cf6134;
+}
+.selbox {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  font-size: 15px;
+  line-height: 1;
+  color: #cf6134;
+}
 .thumb {
   aspect-ratio: 16 / 9;
   position: relative;
   background-size: cover;
   background-position: center;
+}
+.frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 10px 0 4px;
+  background: #000;
+}
+/* el-image variant: whole frame is the click-to-preview target */
+.el-image.frame {
+  cursor: zoom-in;
 }
 .thumb.none {
   background: #fafaf8;
@@ -476,11 +671,16 @@ watch(() => props.projectId, loadEpisodes, { immediate: true });
   color: #1f2126;
 }
 .boardft {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 26px 28px;
+  gap: 12px;
+  padding: 14px 26px;
   font-size: 12.5px;
   color: #8a8d94;
+  background: #fff;
+  border-bottom: 1px solid #ececec;
 }
 </style>

@@ -4,6 +4,13 @@ export interface ImageGenerationRequest {
   width?: number
   height?: number
   style?: string
+  /**
+   * Reference images to condition generation on (Seedream subject/scene consistency).
+   * Each entry is a served asset URL (e.g. `/static/xxx.png`) or an absolute local
+   * path; the provider resolves it to bytes and passes it to the model. Empty/omitted
+   * means pure text-to-image.
+   */
+  referenceImages?: string[]
   metadata?: Record<string, unknown>
 }
 

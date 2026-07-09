@@ -61,11 +61,15 @@
 
         <template v-if="activeItem.canGenerate">
           <div class="sec">参考图</div>
-          <div
+          <el-image
             v-if="activeItem.referenceImageUrl"
             class="refimg"
-            :style="{ backgroundImage: `url(${assetUrl(activeItem.referenceImageUrl)})` }"
-          ></div>
+            :src="assetUrl(activeItem.referenceImageUrl)"
+            :preview-src-list="previewList"
+            :initial-index="previewIndex"
+            fit="cover"
+            preview-teleported
+          />
           <div v-else class="refimg thumb none">尚无参考图</div>
           <button class="btn blk pri" :disabled="busy" @click="generateImage">✨ 生成参考图</button>
         </template>
@@ -122,6 +126,20 @@ const categories = computed(() => [
 
 const items = computed<AssetItem[]>(() => categories.value[activeCat.value].items)
 const activeItem = computed<AssetItem | null>(() => items.value[activeIdx.value] ?? null)
+
+// Whole-pane preview: arrow through every item in the *current category* that has
+// a reference image, in grid order. Index of imageless items is excluded, so the
+// selected item's position is looked up by its resolved URL.
+const previewList = computed(() =>
+  items.value
+    .filter((it) => it.referenceImageUrl)
+    .map((it) => assetUrl(it.referenceImageUrl!)),
+)
+const previewIndex = computed(() => {
+  const url = activeItem.value?.referenceImageUrl
+  if (!url) return 0
+  return Math.max(0, previewList.value.indexOf(assetUrl(url)))
+})
 
 function toCharacterItem(c: Character): AssetItem {
   return {
@@ -428,11 +446,17 @@ watch(() => props.projectId, load, { immediate: true })
   margin-top: 2px;
 }
 .refimg {
+  display: block;
+  width: 100%;
   aspect-ratio: 3 / 4;
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 10px;
   background-size: cover;
   background-position: center;
+}
+/* el-image variant: whole image is the click-to-preview target */
+.el-image.refimg {
+  cursor: zoom-in;
 }
 </style>

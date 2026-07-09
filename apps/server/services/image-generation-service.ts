@@ -60,12 +60,21 @@ export const BatchImageGenerationRequestSchema = z.object({
   options: ImageGenerationOptionsSchema,
 })
 
+// Async batch enqueue for storyboard first frames. `storyboardIds` scopes it to a
+// multi-selection; omitted means every shot in the episode.
+export const EnqueueStoryboardFirstFramesRequestSchema = z.object({
+  storyboardIds: z.array(z.string().min(1)).min(1).optional(),
+  force: z.boolean().optional(),
+  options: ImageGenerationOptionsSchema,
+})
+
 export type ImageTargetType = z.infer<typeof ImageTargetTypeSchema>
 export type StartImageGenerationRequest = z.infer<typeof StartImageGenerationRequestSchema>
 export type StartCharacterReferenceImageRequest = z.infer<typeof StartCharacterReferenceImageRequestSchema>
 export type StartSceneReferenceImageRequest = z.infer<typeof StartSceneReferenceImageRequestSchema>
 export type StartStoryboardFirstFrameRequest = z.infer<typeof StartStoryboardFirstFrameRequestSchema>
 export type BatchImageGenerationRequest = z.infer<typeof BatchImageGenerationRequestSchema>
+export type EnqueueStoryboardFirstFramesRequest = z.infer<typeof EnqueueStoryboardFirstFramesRequestSchema>
 
 type ImageGenerationOptions = StartImageGenerationRequest['options']
 
@@ -130,6 +139,8 @@ interface ResolvedImageTarget {
   existingUrl: string | null
   episodeId?: string | null
   storyboardId?: string | null
+  /** Reference images (shot targets only) that condition generation for consistency. */
+  referenceImages?: string[]
 }
 
 export async function startCharacterReferenceImageGeneration(
@@ -237,6 +248,25 @@ export async function startImageGeneration(
     }
   }
 
+  // Guarantee the shot's character/scene reference images exist before enqueuing the
+  // frame task, then refresh the reference list so the pending task carries them. Runs
+  // synchronously (inline) here — the "ensure before enqueue" ordering that keeps the
+  // concurrent worker from ever seeing a shot whose references aren't ready yet.
+  let referenceImages = target.referenceImages ?? []
+  if (target.targetType === 'storyboard_first_frame' && target.storyboardId) {
+    const [storyboard] = await deps.db
+      .select()
+      .from(storyboards)
+      .where(eq(storyboards.id, target.storyboardId))
+      .limit(1)
+    if (storyboard) {
+      await ensureShotReferenceImages(deps, projectId, [storyboard])
+      if (request.prompt_override === undefined) {
+        referenceImages = (await composeStoryboardFirstFramePrompt(deps.db, projectId, storyboard)).referenceImages
+      }
+    }
+  }
+
   const taskId = await insertPendingImageTask(deps, {
     projectId,
     targetType: target.targetType,
@@ -246,6 +276,7 @@ export async function startImageGeneration(
     force: request.force,
     episodeId: target.episodeId ?? null,
     storyboardId: target.storyboardId ?? null,
+    referenceImages,
   })
 
   void deps.scheduler?.announce(taskId)
@@ -265,6 +296,7 @@ async function insertPendingImageTask(
     force?: boolean
     episodeId?: string | null
     storyboardId?: string | null
+    referenceImages?: string[]
     // Batch paths execute inline right after inserting, so they seed the row as 'running' to
     // keep the worker (which only claims 'pending') from racing them. The single async path
     // leaves it 'pending' for the worker to claim.
@@ -281,6 +313,9 @@ async function insertPendingImageTask(
     prompt: params.prompt,
     options: params.options ?? {},
     force: params.force ?? false,
+    // Persisted so the worker (which reconstructs input from inputJson) can pass the
+    // same references when it later executes this pending task.
+    referenceImages: params.referenceImages ?? [],
     taskId,
   }
 
@@ -314,6 +349,7 @@ interface BatchTargetSpec {
   existingUrl: string | null
   episodeId?: string | null
   storyboardId?: string | null
+  referenceImages?: string[]
 }
 
 async function generateBatch(
@@ -340,6 +376,7 @@ async function generateBatch(
       options: params.options,
       episodeId: spec.episodeId ?? params.episodeId,
       storyboardId: spec.storyboardId,
+      referenceImages: spec.referenceImages,
     })
     results.push(result)
   }
@@ -369,6 +406,7 @@ async function generateOneTarget(
     options?: ImageGenerationOptions
     episodeId?: string | null
     storyboardId?: string | null
+    referenceImages?: string[]
   },
 ): Promise<BatchTargetResult> {
   if (params.force !== true && params.existingUrl) {
@@ -384,6 +422,7 @@ async function generateOneTarget(
     force: params.force,
     episodeId: params.episodeId ?? null,
     storyboardId: params.storyboardId ?? null,
+    referenceImages: params.referenceImages,
     status: 'running',
   })
 
@@ -395,6 +434,7 @@ async function generateOneTarget(
     prompt: params.prompt,
     options: params.options ?? {},
     force: params.force,
+    referenceImages: params.referenceImages,
   })
 
   if (outcome.success) {
@@ -524,12 +564,22 @@ export async function generateEpisodeStoryboardFirstFrames(
     .where(eq(storyboards.episodeId, episodeId))
     .orderBy(storyboards.shotNo)
 
+  // Ensure every referenced character/scene has a reference image before composing shot
+  // prompts, so the composed referenceImages are complete. Scoped to shots that will
+  // actually be generated (existing frames are skipped unless force).
+  const shotsToGenerate = request.force
+    ? storyboardRows
+    : storyboardRows.filter((shot) => !shot.firstFrameImageUrl)
+  await ensureShotReferenceImages(deps, episode.projectId, shotsToGenerate)
+
   const specs: BatchTargetSpec[] = []
   for (const storyboard of storyboardRows) {
+    const composed = await composeStoryboardFirstFramePrompt(deps.db, episode.projectId, storyboard)
     specs.push({
       targetId: storyboard.id,
       existingUrl: storyboard.firstFrameImageUrl,
-      prompt: await composeStoryboardFirstFramePrompt(deps.db, episode.projectId, storyboard),
+      prompt: composed.prompt,
+      referenceImages: composed.referenceImages,
       episodeId: storyboard.episodeId,
       storyboardId: storyboard.id,
     })
@@ -543,6 +593,108 @@ export async function generateEpisodeStoryboardFirstFrames(
     options: request.options,
     specs,
   })
+}
+
+export interface EnqueueStoryboardFirstFramesResult {
+  episodeId: string
+  /** Storyboards considered after the optional `storyboardIds` filter. */
+  total: number
+  /** Task ids for the shots that were enqueued (status `pending`). */
+  queued: string[]
+  /** Storyboard ids that were left alone (already has image without force, or already in flight). */
+  skipped: string[]
+}
+
+/**
+ * Async counterpart to {@link generateEpisodeStoryboardFirstFrames}: instead of running each
+ * image inline, it seeds a `pending` task per eligible shot and hands them to the worker (same
+ * path the single-shot generate-first-frame uses). Powers the workbench "generate all / generate
+ * selected" batch. Shots that already have a first frame are skipped unless `force`, and shots with
+ * an image task already pending/running are skipped to avoid double-queueing.
+ */
+export async function enqueueEpisodeStoryboardFirstFrames(
+  deps: ImageGenerationServiceDeps,
+  episodeId: string,
+  request: EnqueueStoryboardFirstFramesRequest,
+): Promise<EnqueueStoryboardFirstFramesResult> {
+  const episode = await resolveEpisode(deps.db, episodeId)
+
+  if (!episode) {
+    throw new ImageGenerationServiceError(`Episode not found: ${episodeId}`, 404)
+  }
+
+  const force = request.force ?? false
+
+  const allRows = await deps.db
+    .select()
+    .from(storyboards)
+    .where(eq(storyboards.episodeId, episodeId))
+    .orderBy(storyboards.shotNo)
+
+  const rows =
+    request.storyboardIds && request.storyboardIds.length > 0
+      ? ((ids) => allRows.filter((row) => ids.has(row.id)))(new Set(request.storyboardIds))
+      : allRows
+
+  const inFlightRows = await deps.db
+    .select({ storyboardId: generationTasks.storyboardId })
+    .from(generationTasks)
+    .where(
+      and(
+        eq(generationTasks.episodeId, episodeId),
+        eq(generationTasks.taskType, 'image_generation'),
+        inArray(generationTasks.status, ['pending', 'running']),
+      ),
+    )
+  const inFlightIds = new Set(
+    inFlightRows.map((row) => row.storyboardId).filter((id): id is string => id != null),
+  )
+
+  const queued: string[] = []
+  const skipped: string[] = []
+
+  // Split into skip vs generate up front so we can synchronously back-fill the referenced
+  // character/scene images before any shot task is enqueued. With the worker running shots
+  // concurrently, generating references here (serial, de-duplicated) is what prevents the
+  // same character being generated twice by two shots that share it.
+  const toGenerate: Array<typeof storyboards.$inferSelect> = []
+  for (const storyboard of rows) {
+    if (inFlightIds.has(storyboard.id) || (!force && storyboard.firstFrameImageUrl)) {
+      skipped.push(storyboard.id)
+      continue
+    }
+    toGenerate.push(storyboard)
+  }
+
+  await ensureShotReferenceImages(deps, episode.projectId, toGenerate)
+
+  for (const storyboard of toGenerate) {
+    const { prompt, referenceImages } = await composeStoryboardFirstFramePrompt(
+      deps.db,
+      episode.projectId,
+      storyboard,
+    )
+    const taskId = await insertPendingImageTask(deps, {
+      projectId: episode.projectId,
+      targetType: 'storyboard_first_frame',
+      targetId: storyboard.id,
+      prompt,
+      referenceImages,
+      options: request.options,
+      force,
+      episodeId: storyboard.episodeId,
+      storyboardId: storyboard.id,
+      status: 'pending',
+    })
+    queued.push(taskId)
+  }
+
+  if (queued.length > 0) {
+    void deps.scheduler?.announce(queued)
+    deps.scheduler?.notify()
+  }
+
+  return { episodeId, total: rows.length, queued, skipped }
 }
 
 export async function generateAllEpisodeImages(
@@ -643,6 +795,7 @@ export async function executeImageGeneration(
     prompt: string
     options?: StartImageGenerationRequest['options']
     force?: boolean
+    referenceImages?: string[]
   },
 ) {
   const startedAt = new Date().toISOString()
@@ -664,6 +817,7 @@ export async function executeImageGeneration(
       width: input.options?.width,
       height: input.options?.height,
       style: input.options?.style,
+      referenceImages: input.referenceImages,
       metadata: {
         projectId: input.projectId,
         targetType: input.targetType,
@@ -833,8 +987,15 @@ async function resolveImageTarget(
     throw new ImageGenerationServiceError(`Storyboard not found: ${request.target_id}`, 404)
   }
 
-  const prompt =
-    request.prompt_override ?? (await composeStoryboardFirstFramePrompt(db, projectId, storyboard))
+  let prompt: string
+  let referenceImages: string[] = []
+  if (request.prompt_override) {
+    prompt = request.prompt_override
+  } else {
+    const composed = await composeStoryboardFirstFramePrompt(db, projectId, storyboard)
+    prompt = composed.prompt
+    referenceImages = composed.referenceImages
+  }
 
   return {
     projectId,
@@ -844,14 +1005,26 @@ async function resolveImageTarget(
     existingUrl: storyboard.firstFrameImageUrl,
     episodeId: storyboard.episodeId,
     storyboardId: storyboard.id,
+    referenceImages,
   }
+}
+
+// Upper bound on reference images per shot. Characters take priority over the scene:
+// too many references dilute subject fidelity, so we keep the people and drop the
+// least-important extras if a shot somehow references many assets.
+const MAX_SHOT_REFERENCE_IMAGES = 6
+
+interface ComposedStoryboardPrompt {
+  prompt: string
+  /** Served asset URLs (characters first, then scene) fed to the model as reference pixels. */
+  referenceImages: string[]
 }
 
 async function composeStoryboardFirstFramePrompt(
   db: DatabaseClient,
   projectId: string,
   storyboard: typeof storyboards.$inferSelect,
-) {
+): Promise<ComposedStoryboardPrompt> {
   const parts: Array<string | null | undefined> = [
     storyboard.imagePrompt,
     storyboard.action ? `Action: ${storyboard.action}` : null,
@@ -863,22 +1036,11 @@ async function composeStoryboardFirstFramePrompt(
     parts.push(`Dialogue: ${dialogueText}`)
   }
 
-  if (storyboard.sceneId) {
-    const [scene] = await db
-      .select()
-      .from(scenes)
-      .where(and(eq(scenes.id, storyboard.sceneId), eq(scenes.projectId, projectId)))
-      .limit(1)
-
-    if (scene) {
-      parts.push(
-        scene.name ? `Scene: ${scene.name}` : null,
-        scene.description,
-        scene.visualPrompt,
-        scene.referenceImageUrl ? `Scene reference image: ${scene.referenceImageUrl}` : null,
-      )
-    }
-  }
+  // Reference images carry visual identity (characters + scene). Their pixels are sent
+  // to the model out-of-band via referenceImages; the text below only labels each named
+  // subject so the model can map a reference to who/where it is. Props stay text-only.
+  const characterRefs: string[] = []
+  let sceneRef: string | null = null
 
   const characterIds = parseIdArray(storyboard.characterIdsJson)
   if (characterIds.length > 0) {
@@ -888,11 +1050,25 @@ async function composeStoryboardFirstFramePrompt(
       .where(and(eq(characters.projectId, projectId), inArray(characters.id, characterIds)))
 
     for (const character of characterRows) {
-      parts.push(
-        `Character: ${character.name}`,
-        character.appearance,
-        character.referenceImageUrl ? `Character reference image: ${character.referenceImageUrl}` : null,
-      )
+      parts.push(`Character: ${character.name}`, character.appearance)
+      if (character.referenceImageUrl) {
+        characterRefs.push(character.referenceImageUrl)
+      }
+    }
+  }
+
+  if (storyboard.sceneId) {
+    const [scene] = await db
+      .select()
+      .from(scenes)
+      .where(and(eq(scenes.id, storyboard.sceneId), eq(scenes.projectId, projectId)))
+      .limit(1)
+
+    if (scene) {
+      parts.push(scene.name ? `Scene: ${scene.name}` : null, scene.description, scene.visualPrompt)
+      if (scene.referenceImageUrl) {
+        sceneRef = scene.referenceImageUrl
+      }
     }
   }
 
@@ -908,7 +1084,83 @@ async function composeStoryboardFirstFramePrompt(
     }
   }
 
-  return compactPrompt(parts)
+  const referenceImages = [...characterRefs, ...(sceneRef ? [sceneRef] : [])].slice(
+    0,
+    MAX_SHOT_REFERENCE_IMAGES,
+  )
+
+  return { prompt: compactPrompt(parts), referenceImages }
+}
+
+/**
+ * Guarantees every character/scene referenced by the given shots has a reference image
+ * before shot frames are generated — the write-back in {@link executeImageGeneration}
+ * means later shots reuse the freshly generated reference. Runs the missing references
+ * strictly serially and de-duplicated, so the concurrent worker never double-generates
+ * the same character. Called at enqueue time (before shot tasks exist), so ordering is
+ * assured without any task-dependency machinery.
+ */
+async function ensureShotReferenceImages(
+  deps: ImageGenerationServiceDeps,
+  projectId: string,
+  shots: Array<typeof storyboards.$inferSelect>,
+): Promise<void> {
+  const characterIds = new Set<string>()
+  const sceneIds = new Set<string>()
+  for (const shot of shots) {
+    for (const id of parseIdArray(shot.characterIdsJson)) {
+      characterIds.add(id)
+    }
+    if (shot.sceneId) {
+      sceneIds.add(shot.sceneId)
+    }
+  }
+
+  if (characterIds.size > 0) {
+    const rows = await deps.db
+      .select()
+      .from(characters)
+      .where(and(eq(characters.projectId, projectId), inArray(characters.id, [...characterIds])))
+    for (const character of rows) {
+      if (character.referenceImageUrl) {
+        continue
+      }
+      await generateOneTarget(deps, {
+        projectId,
+        targetType: 'character_reference_image',
+        targetId: character.id,
+        prompt: compactPrompt([character.name, character.role, character.appearance, character.personality]),
+        existingUrl: null,
+        force: false,
+      })
+    }
+  }
+
+  if (sceneIds.size > 0) {
+    const rows = await deps.db
+      .select()
+      .from(scenes)
+      .where(and(eq(scenes.projectId, projectId), inArray(scenes.id, [...sceneIds])))
+    for (const scene of rows) {
+      if (scene.referenceImageUrl) {
+        continue
+      }
+      await generateOneTarget(deps, {
+        projectId,
+        targetType: 'scene_reference_image',
+        targetId: scene.id,
+        prompt: compactPrompt([
+          scene.visualPrompt,
+          scene.name,
+          scene.description,
+          scene.locationType,
+          scene.visualStyle,
+        ]),
+        existingUrl: null,
+        force: false,
+      })
+    }
+  }
 }
 
 function parseIdArray(value: string) {

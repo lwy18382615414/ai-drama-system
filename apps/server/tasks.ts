@@ -58,6 +58,7 @@ export function createTaskWorker(deps: TaskWorkerDeps, options?: TaskWorkerOptio
         prompt: input.prompt,
         options: input.options ?? {},
         force: input.force ?? false,
+        referenceImages: input.referenceImages ?? [],
       },
     )
   })

@@ -44,6 +44,7 @@ Interface shape:
   - optional `width`
   - optional `height`
   - optional `style`
+  - optional `referenceImages` — served asset URLs / local paths fed to the model as reference pixels for subject/scene consistency (see `docs/image-consistency.md`)
   - optional `metadata`
 - `ImageGenerationResult`
   - `imageUrl`
@@ -59,6 +60,8 @@ The composition root fails fast at startup if the image provider is unconfigured
 - `IMAGE_PROVIDER_API_KEY` — required
 - `IMAGE_PROVIDER_BASE_URL` — required
 - `IMAGE_PROVIDER_MODEL` — optional model override (default `gpt-image-2`)
+
+When `referenceImages` are present, the provider resolves each to a base64 data URI and passes them on a non-standard `image` field the model honors for reference-conditioned generation (verified for Seedream via the configured proxy). This is how storyboard first frames keep characters and scenes visually consistent across shots — see `docs/image-consistency.md`.
 
 `MockImageProvider` is retained only as a deterministic test double, injected via DI in tests. A smoke test is available via `npm run smoke:image-provider`.
 

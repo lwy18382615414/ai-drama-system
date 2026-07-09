@@ -269,6 +269,13 @@ async function buildStoryboardAgentInput(
     throw new StoryboardServiceError(`Episode has no linked scenes: ${episodeId}`, 400)
   }
 
+  // Characters are the anchor for cross-shot visual consistency: without at least one,
+  // shots have no character reference to condition on and the model invents people. An
+  // episode with zero characters almost always means asset extraction did not run.
+  if (characterRows.length === 0) {
+    throw new StoryboardServiceError(`Episode has no linked characters: ${episodeId}`, 400)
+  }
+
   const scriptStructuredJson = ScriptAgentOutputSchema.parse(JSON.parse(script.structuredJson))
 
   return {
