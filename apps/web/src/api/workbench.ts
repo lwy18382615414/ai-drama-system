@@ -297,3 +297,21 @@ export function generateSceneImage(sceneId: string) {
 export function generateStoryboardFirstFrame(storyboardId: string) {
   return post<TaskAck>(`/api/storyboards/${storyboardId}/generate-first-frame`)
 }
+
+export interface BatchFirstFrameAck {
+  episodeId: string
+  total: number
+  queued: string[]
+  skipped: string[]
+}
+
+/**
+ * Batch-enqueue storyboard first frames for an episode. Omit `storyboardIds` for every shot
+ * (skips ones already generated); pass a selection with `force: true` to regenerate them.
+ */
+export function generateEpisodeStoryboardFirstFrames(
+  episodeId: string,
+  body?: { storyboardIds?: string[]; force?: boolean },
+) {
+  return post<BatchFirstFrameAck>(`/api/episodes/${episodeId}/generate-storyboard-first-frames`, body)
+}

@@ -6,10 +6,11 @@ import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { handleServiceError, invalidQuery, invalidRequestBody, notFound, ok } from '../api-response.js'
 import {
   BatchImageGenerationRequestSchema,
+  enqueueEpisodeStoryboardFirstFrames,
+  EnqueueStoryboardFirstFramesRequestSchema,
   generateAllEpisodeImages,
   generateEpisodeCharacterImages,
   generateEpisodeSceneImages,
-  generateEpisodeStoryboardFirstFrames,
   getEpisodeImageGenerationStatus,
   getGenerationTask,
   getProjectAssets,
@@ -161,13 +162,29 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
     }
   })
 
+  // Async batch: enqueues a pending image task per eligible shot (worker runs them), rather than
+  // generating inline. Optional `storyboardIds` scopes it to a multi-selection.
   app.post('/api/episodes/:episodeId/generate-storyboard-first-frames', async (c) => {
-    const parsed = await parseBatchRequest(c)
-    if ('response' in parsed) return parsed.response
+    const body = await c.req.json().catch(() => ({}))
+    const forceQuery = parseForceQuery(c.req.query('force'))
+
+    if (forceQuery === 'invalid') {
+      return invalidQuery(c)
+    }
+
+    const requestBody = {
+      ...(body ?? {}),
+      ...(forceQuery === undefined ? {} : { force: forceQuery }),
+    }
+    const parsed = EnqueueStoryboardFirstFramesRequestSchema.safeParse(requestBody)
+
+    if (!parsed.success) {
+      return invalidRequestBody(c, parsed.error.issues)
+    }
 
     try {
-      const result = await generateEpisodeStoryboardFirstFrames(deps, c.req.param('episodeId'), parsed.data)
-      return ok(c, result, 200)
+      const result = await enqueueEpisodeStoryboardFirstFrames(deps, c.req.param('episodeId'), parsed.data)
+      return ok(c, result, 202)
     } catch (error) {
       return handleServiceError(c, error)
     }
