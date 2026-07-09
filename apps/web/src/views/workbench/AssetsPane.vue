@@ -88,12 +88,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, toRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { assetUrl, workbenchApi } from '@/api'
 import type { Character, Prop, Scene } from '@/api/workbench'
+import { useTaskStream } from '@/composables/useTaskStream'
 
 const props = defineProps<{ projectId: string; inspOn: boolean }>()
+
+const { tasks: streamTasks } = useTaskStream(toRef(props, 'projectId'))
 
 const characters = ref<Character[]>([])
 const scenes = ref<Scene[]>([])
@@ -223,6 +226,24 @@ async function generateImage() {
 }
 
 watch(() => props.projectId, load, { immediate: true })
+
+// A character/scene reference-image task completing in the background writes a new
+// referenceImageUrl on the row, but the async enqueue endpoint only returns a task
+// ack — so reload the assets when one settles to surface the freshly generated image.
+const completedRefImageCount = computed(
+  () =>
+    streamTasks.value.filter(
+      (t) =>
+        t.taskType === 'image_generation' &&
+        (t.targetType === 'character_reference_image' ||
+          t.targetType === 'scene_reference_image') &&
+        t.status === 'completed',
+    ).length,
+)
+
+watch(completedRefImageCount, (n, prev) => {
+  if (n > (prev ?? 0)) void load()
+})
 </script>
 
 <style scoped>
