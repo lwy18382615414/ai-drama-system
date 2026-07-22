@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#f5f7f9;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+</helmet>
+<div style="display:flex; min-height:100vh; color:#1f2225;">
+  <!-- 侧边导航 -->
+  <aside style="width:208px; flex-shrink:0; background:#ffffff; border-right:1px solid #e8eaed; display:flex; flex-direction:column;">
+    <a href="项目列表.dc.html" style="display:block; padding:18px 20px 14px; border-bottom:1px solid #f0f2f4;">
+      <div style="font-size:15px; font-weight:600; color:#1f2225;">晚风照进山海</div>
+      <div style="font-size:12px; color:#8a9099; margin-top:3px;">小说 → 短剧 工作台 · 返回项目列表</div>
+    </a>
+    <nav style="padding:10px 10px; display:flex; flex-direction:column; gap:2px;">
+      <div style="padding:8px 12px; border-radius:6px; font-size:13px; background:#e7f5ee; color:#18a058; font-weight:600; cursor:pointer;">章节与事件</div>
+      <a href="分批规划.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">分批规划</a>
+      <a href="管线看板.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">集列表 · 看板</a>
+      <a href="资产库.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">资产库</a>
+    </nav>
+  </aside>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <!-- 顶栏 -->
+    <header style="height:52px; background:#ffffff; border-bottom:1px solid #e8eaed; display:flex; align-items:center; gap:16px; padding:0 20px;">
+      <div style="font-size:13px; color:#8a9099;">项目 / <span style="color:#1f2225;">晚风照进山海</span> / 章节与事件</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#18a058;"><span style="width:7px; height:7px; border-radius:50%; background:#18a058;"></span>实时已连接</div>
+        <div style="display:flex; align-items:center; gap:8px; border:1px solid #e0e3e7; background:#fff; border-radius:16px; padding:5px 12px 5px 8px; font-size:12px;">
+          <span style="width:16px; height:16px; border-radius:50%; border:2px solid #d6ecdf; border-top-color:#18a058; animation:spin 1s linear infinite; display:inline-block;"></span>
+          2 个进行中
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1; padding:20px 24px 48px; display:flex; flex-direction:column; gap:14px;">
+      <!-- 页头 -->
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div>
+          <h1 style="margin:0; font-size:18px; font-weight:600;">章节与事件</h1>
+          <div style="font-size:13px; color:#8a9099; margin-top:4px;">42 章 · 已抽取 38 · 抽取中 2 · 失败 1 · 未抽取 1</div>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:10px;">
+          <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 14px; cursor:pointer;" style-hover="border-color:#8a9099;">导入章节</button>
+          <button onClick="{{ openCostModal }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">抽取未处理章节</button>
+        </div>
+      </div>
+
+      <div style="flex:1; display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; min-height:0;">
+        <!-- 章节列表 -->
+        <div style="flex:1 1 480px; min-width:480px; background:#fff; border:1px solid #e8eaed; border-radius:10px; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:64px 1fr 90px 130px 80px; align-items:center; padding:10px 16px; border-bottom:1px solid #edf0f2; background:#fafbfc; font-size:12px; color:#8a9099;">
+            <div>章节</div><div>标题</div><div style="text-align:right;">字数</div><div style="text-align:center;">事件抽取</div><div style="text-align:right;">事件数</div>
+          </div>
+          <sc-for list="{{ chapters }}" as="ch" hint-placeholder-count="10">
+            <div onClick="{{ ch.select }}" style="display:grid; grid-template-columns:64px 1fr 90px 130px 80px; align-items:center; padding:10px 16px; border-bottom:1px solid #f2f4f6; cursor:pointer; background:{{ ch.rowBg }};" style-hover="background:#f8fafb;">
+              <div style="font-size:13px; color:#8a9099;">{{ ch.no }}</div>
+              <div style="font-size:13px; font-weight:{{ ch.weight }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ ch.title }}</div>
+              <div style="font-size:12px; color:#8a9099; text-align:right;">{{ ch.words }}</div>
+              <div style="display:flex; justify-content:center;">
+                <span title="{{ ch.tip }}" style="display:inline-flex; align-items:center; gap:5px; font-size:11px; border-radius:10px; padding:3px 10px; background:{{ ch.bg }}; color:{{ ch.fg }};">
+                  <sc-if value="{{ ch.spin }}" hint-placeholder-val="{{ false }}">
+                    <span style="width:9px; height:9px; border-radius:50%; border:2px solid #bcd9f8; border-top-color:#2080f0; animation:spin .9s linear infinite; display:inline-block;"></span>
+                  </sc-if>
+                  {{ ch.statusLabel }}
+                </span>
+              </div>
+              <div style="font-size:13px; text-align:right; color:#5b6169;">{{ ch.eventCount }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- 事件面板 -->
+        <div style="flex:1 1 340px; min-width:340px; max-width:440px; background:#fff; border:1px solid #e8eaed; border-radius:10px; display:flex; flex-direction:column; max-height:72vh;">
+          <div style="padding:14px 18px; border-bottom:1px solid #edf0f2;">
+            <div style="font-size:14px; font-weight:600;">{{ panelTitle }}</div>
+            <div style="font-size:12px; color:#8a9099; margin-top:3px;">{{ panelMeta }}</div>
+          </div>
+          <div style="flex:1; overflow:auto; padding:14px 18px; display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ events }}" as="ev" hint-placeholder-count="4">
+              <div style="border:1px solid #e8eaed; border-radius:8px; padding:12px 14px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:11px; border-radius:4px; padding:1px 8px; background:{{ ev.tagBg }}; color:{{ ev.tagFg }};">{{ ev.type }}</span>
+                  <span style="font-size:12px; color:#a0a6ad; margin-left:auto;">{{ ev.anchorUse }}</span>
+                </div>
+                <div style="font-size:13px; line-height:1.7; margin-top:8px; color:#2b2f33;">{{ ev.desc }}</div>
+                <div style="font-size:12px; color:#8a9099; margin-top:6px;">涉及：{{ ev.who }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:10px 18px; border-top:1px solid #edf0f2; font-size:12px; color:#8a9099;">事件可作为形象版本的生效锚点，不随集重编号漂移。</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 成本确认框 -->
+  <sc-if value="{{ costModalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:400px; background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 16px 48px rgba(0,0,0,.2);">
+        <div style="font-size:16px; font-weight:600;">批量操作确认</div>
+        <div style="margin-top:10px; font-size:13px; color:#5b6169; line-height:1.7;">将为 2 个未处理章节（第 41、42 章）抽取剧情事件。</div>
+        <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:10px;">
+          <button onClick="{{ closeCostModal }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">取消</button>
+          <button onClick="{{ closeCostModal }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">确认并创建 Job</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { sel: 3, costModalOpen: false };
+
+  chaptersData() {
+    return [
+      { no: '01', title: '雨夜的电话', words: '3,214', s: 'done', n: 5 },
+      { no: '02', title: '回到镇上', words: '2,876', s: 'done', n: 4 },
+      { no: '03', title: '老宅', words: '3,540', s: 'done', n: 6 },
+      { no: '04', title: '母亲的来信', words: '3,102', s: 'done', n: 7 },
+      { no: '05', title: '阁楼里的木箱', words: '2,988', s: 'done', n: 5 },
+      { no: '06', title: '陈叔的沉默', words: '3,421', s: 'done', n: 4 },
+      { no: '07', title: '山道旧事', words: '3,067', s: 'done', n: 6 },
+      { no: '08', title: '合同', words: '2,745', s: 'done', n: 3 },
+      { no: '39', title: '真相之前', words: '3,310', s: 'done', n: 5 },
+      { no: '40', title: '雪夜', words: '3,155', s: 'failed', n: 0 },
+      { no: '41', title: '归途', words: '2,980', s: 'running', n: 0 },
+      { no: '42', title: '山海之间（终）', words: '3,624', s: 'pending', n: 0 },
+    ];
+  }
+
+  eventsFor(idx) {
+    if (idx !== 3) return [
+      { type: '剧情节点', tagBg: '#eaf3fd', tagFg: '#2080f0', desc: '该章事件抽取完成后在此展示。', who: '—', anchorUse: '' },
+    ];
+    return [
+      { type: '关键道具', tagBg: '#f1eafd', tagFg: '#7b5cd6', desc: '林晚在堂屋发现母亲留下的泛黄信件，信封未署名。', who: '林晚', anchorUse: '' },
+      { type: '剧情节点', tagBg: '#eaf3fd', tagFg: '#2080f0', desc: '林晚决定登上阁楼寻找母亲遗物，发现上锁的木箱。', who: '林晚', anchorUse: '' },
+      { type: '回忆闪回', tagBg: '#fdf3e3', tagFg: '#ad7a1e', desc: '母亲年轻时背竹篓走山道的回忆片段首次出现。', who: '母亲', anchorUse: '被 1 个形象版本引用' },
+      { type: '悬念', tagBg: '#fbeef1', tagFg: '#d03050', desc: '信中「山海之间」四字暗示母亲当年离开的真实原因。', who: '林晚 · 母亲', anchorUse: '' },
+    ];
+  }
+
+  renderVals() {
+    const sel = this.state.sel;
+    const statusMap = {
+      done: { statusLabel: '已抽取', bg: '#e7f5ee', fg: '#18a058', tip: '事件抽取完成' },
+      running: { statusLabel: '抽取中', bg: '#eaf3fd', fg: '#2080f0', tip: '任务进行中，可在任务中心取消', spin: true },
+      failed: { statusLabel: '失败', bg: '#fbeef1', fg: '#d03050', tip: '生成结果格式异常，已自动修复失败 · 点击重试' },
+      pending: { statusLabel: '未抽取', bg: '#f1f3f5', fg: '#a0a6ad', tip: '尚未抽取事件' },
+    };
+    const data = this.chaptersData();
+    const chapters = data.map((c, i) => ({
+      no: c.no, title: c.title, words: c.words,
+      eventCount: c.n ? String(c.n) : '—',
+      weight: i === sel ? 600 : 400,
+      rowBg: i === sel ? '#f2faf5' : '#fff',
+      spin: false,
+      ...statusMap[c.s],
+      select: () => this.setState({ sel: i }),
+    }));
+    const cur = data[sel];
+    return {
+      chapters,
+      panelTitle: `第 ${Number(cur.no)} 章 · ${cur.title}`,
+      panelMeta: cur.n ? `${cur.n} 个剧情事件 · 抽取于 2 天前` : '暂无事件',
+      events: this.eventsFor(sel),
+      costModalOpen: this.state.costModalOpen,
+      openCostModal: () => this.setState({ costModalOpen: true }),
+      closeCostModal: () => this.setState({ costModalOpen: false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

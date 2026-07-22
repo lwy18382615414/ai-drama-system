@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#eef1f4;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+<div style="min-height:100vh; color:#1f2225; display:flex; flex-direction:column;">
+  <!-- 顶栏 -->
+  <header style="height:56px; background:#fff; border-bottom:1px solid #e4e7eb; display:flex; align-items:center; gap:16px; padding:0 20px; flex-shrink:0;">
+    <a href="资产库.dc.html" style="font-size:13px; color:#8a9099;">返回</a>
+    <div style="font-size:13px; color:#8a9099;">晚风照进山海 / <a href="资产库.dc.html" style="color:#8a9099;">资产库</a> / <span style="color:#1f2225; font-weight:600;">林晚</span></div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#18a058;"><span style="width:7px; height:7px; border-radius:50%; background:#18a058;"></span>实时已连接</div>
+      <div style="display:flex; align-items:center; gap:8px; border:1px solid #e0e3e7; background:#fff; border-radius:16px; padding:5px 12px 5px 8px; font-size:12px;">
+        <span style="width:16px; height:16px; border-radius:50%; border:2px solid #d6ecdf; border-top-color:#18a058; animation:spin 1s linear infinite; display:inline-block;"></span>
+        2 个进行中
+      </div>
+    </div>
+  </header>
+
+  <div style="flex:1; padding:24px 26px 56px;">
+    <!-- 角色头部 -->
+    <div style="display:flex; align-items:center; gap:16px;">
+      <image-slot id="linwan-avatar" shape="rounded" radius="14" placeholder="头像" style="width:64px; height:64px; flex-shrink:0;"></image-slot>
+      <div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <h1 style="margin:0; font-size:20px; font-weight:600;">林晚</h1>
+          <span style="font-size:11px; background:#e7f5ee; color:#18a058; border-radius:4px; padding:2px 8px;">女主</span>
+          <span style="font-size:11px; background:#f1f3f5; color:#5b6169; border-radius:4px; padding:2px 8px;">项目级资产</span>
+        </div>
+        <div style="font-size:13px; color:#8a9099; margin-top:5px;">出现于 9 集 · 当前形象 v2 · 最近由第 4 集剧本自动更新</div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:10px;">
+        <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 14px; cursor:pointer;" style-hover="border-color:#8a9099;">编辑描述</button>
+        <button onClick="{{ openCostModal }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">重新生成受影响内容</button>
+      </div>
+    </div>
+
+    <!-- stale 提示 -->
+    <div style="margin-top:18px; display:flex; align-items:center; gap:10px; background:#fdf6e9; border:1px solid #f3e3bf; border-radius:10px; padding:10px 14px;">
+      <span style="width:8px; height:8px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>
+      <span style="font-size:13px; color:#7a5a14;">角色描述于今天 12:40 修改，<b>2 张参考图与 3 张首帧</b>已标记过期</span>
+      <a href="#affected" style="margin-left:auto; font-size:12px; color:#8a6116;">查看受影响内容 ↓</a>
+    </div>
+
+    <div style="margin-top:22px; display:flex; gap:22px; align-items:flex-start;">
+      <!-- 左列：大图 + 时间轴 -->
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:16px;">
+        <!-- 形象大图 -->
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:20px 22px;">
+          <div style="display:flex; align-items:center; margin-bottom:14px;">
+            <div style="font-size:14px; font-weight:600;">形象参考图 · 当前 v2</div>
+            <div style="margin-left:10px; font-size:12px; color:#8a9099;">生成于今天 12:41 · 1024×1365</div>
+            <div style="margin-left:auto; display:flex; gap:8px;">
+              <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer;" style-hover="border-color:#8a9099;">下载</button>
+              <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer;" style-hover="border-color:#18a058; color:#18a058;">重新生成</button>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) 200px; gap:14px;">
+            <div style="height:420px; min-width:0; overflow:hidden; border-radius:10px;">
+              <image-slot id="linwan-main" shape="rounded" radius="10" placeholder="主参考图（正面全身）"></image-slot>
+            </div>
+            <div style="display:grid; grid-template-rows:repeat(3, 1fr); gap:14px; height:420px; min-width:0;">
+              <image-slot id="linwan-side" shape="rounded" radius="10" placeholder="侧面"></image-slot>
+              <image-slot id="linwan-face" shape="rounded" radius="10" placeholder="面部特写"></image-slot>
+              <image-slot id="linwan-expr" shape="rounded" radius="10" placeholder="表情参考"></image-slot>
+            </div>
+          </div>
+          <div style="margin-top:10px; font-size:12px; color:#a0a6ad;">主图 + 三视角参考，供分镜与首帧生成时保持形象一致。</div>
+        </div>
+        <!-- 时间轴 -->
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:20px 22px;">
+          <div style="display:flex; align-items:center; margin-bottom:16px;">
+            <div style="font-size:14px; font-weight:600;">形象版本时间轴</div>
+            <button onClick="{{ toggleVersionForm }}" style="margin-left:auto; border:1px solid #e0e3e7; background:#fff; color:#18a058; font-size:12px; border-radius:6px; padding:5px 12px; cursor:pointer;" style-hover="border-color:#18a058;">+ 新增手动版本</button>
+          </div>
+          <sc-if value="{{ versionFormOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #c3e6d2; background:#f4faf6; border-radius:10px; padding:16px; margin-bottom:16px; display:flex; flex-direction:column; gap:10px;">
+              <div style="font-size:13px; font-weight:600;">新增手动版本</div>
+              <div style="font-size:12px; color:#5b6169;">生效锚点（优先选剧情事件，不随重编号漂移；集号仅作回退）</div>
+              <select style="border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; color:#2b2f33; background:#fff; max-width:420px;">
+                <option>剧情事件 · 林晚剪短发（第 14 集前后）</option>
+                <option>剧情事件 · 三年后时间跳跃</option>
+                <option>剧情事件 · 婚礼</option>
+                <option>集号回退 · 自第 14 集起</option>
+              </select>
+              <textarea placeholder="形象描述变更，如：短发，深色大衣，气质更冷" style="border:1px solid #dfe3e7; border-radius:6px; padding:9px 12px; font-size:12px; line-height:1.7; font-family:inherit; height:60px; resize:none; outline:none; max-width:420px;" style-focus="border-color:#18a058;"></textarea>
+              <div style="display:flex; gap:8px;">
+                <button onClick="{{ toggleVersionForm }}" style="border:none; background:#18a058; color:#fff; font-size:12px; border-radius:5px; padding:6px 14px; cursor:pointer;" style-hover="background:#36ad6a;">创建版本</button>
+                <button onClick="{{ toggleVersionForm }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:6px 14px; cursor:pointer;">取消</button>
+              </div>
+            </div>
+          </sc-if>
+          <div style="display:flex; flex-direction:column;">
+            <sc-for list="{{ versions }}" as="v" hint-placeholder-count="3">
+              <div style="display:flex; gap:16px;">
+                <div style="display:flex; flex-direction:column; align-items:center; flex-shrink:0;">
+                  <span style="width:10px; height:10px; border-radius:50%; background:{{ v.dot }}; border:2px solid #fff; box-shadow:0 0 0 1px {{ v.dot }}; margin-top:5px;"></span>
+                  <sc-if value="{{ v.hasLine }}" hint-placeholder-val="{{ true }}">
+                    <span style="width:1px; flex:1; background:#e4e7eb; margin:4px 0;"></span>
+                  </sc-if>
+                </div>
+                <div style="flex:1; min-width:0; padding-bottom:22px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:14px; font-weight:600;">{{ v.name }}</span>
+                    <span style="font-size:11px; background:{{ v.tagBg }}; color:{{ v.tagFg }}; border-radius:4px; padding:1px 8px;">{{ v.tag }}</span>
+                    <sc-if value="{{ v.current }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:11px; background:#e7f5ee; color:#18a058; border-radius:4px; padding:1px 8px;">当前</span>
+                    </sc-if>
+                    <span style="margin-left:auto; font-size:12px; color:#a0a6ad;">{{ v.time }}</span>
+                  </div>
+                  <div style="font-size:12px; color:#8a9099; margin-top:4px;">{{ v.anchor }}</div>
+                  <div style="margin-top:10px; display:flex; gap:14px; align-items:flex-start; background:#fafbfc; border:1px solid #edf0f2; border-radius:10px; padding:12px 14px;">
+                    <div style="width:96px; height:96px; border-radius:8px; background:{{ v.thumbBg }}; display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; flex-shrink:0;">参考图</div>
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-size:13px; color:#2b2f33; line-height:1.8;">{{ v.desc }}</div>
+                      <div style="margin-top:10px; display:flex; gap:8px;">
+                        <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer;" style-hover="border-color:#18a058; color:#18a058;">重新生成参考图</button>
+                        <button style="border:none; background:none; color:#8a9099; font-size:12px; cursor:pointer;" style-hover="color:#1f2225;">查看使用该版本的集</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右列 -->
+      <div style="width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:16px;">
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:18px 20px;">
+          <div style="font-size:14px; font-weight:600;">角色描述</div>
+          <div style="margin-top:10px; font-size:13px; line-height:1.9; color:#2b2f33;">28 岁，都市白领气质，长发微卷，常穿米色风衣。眼神克制而坚韧，情绪多藏于细节。</div>
+          <div style="margin-top:10px; font-size:12px; color:#a0a6ad;">修改于今天 12:40</div>
+        </div>
+        <div id="affected" style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:18px 20px;">
+          <div style="font-size:14px; font-weight:600;">受影响内容</div>
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px; font-size:13px; color:#5b6169;">
+            <div style="display:flex; align-items:center; gap:8px;"><span style="width:7px; height:7px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>参考图 2 张已过期<a href="#" style="margin-left:auto; font-size:12px;">重新生成</a></div>
+            <div style="display:flex; align-items:center; gap:8px;"><span style="width:7px; height:7px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>首帧 3 张已过期（第 4 集）<a href="#" style="margin-left:auto; font-size:12px;">重新生成</a></div>
+          </div>
+          <button onClick="{{ openCostModal }}" style="margin-top:14px; width:100%; border:none; background:#f0a020; color:#fff; font-size:12px; border-radius:6px; padding:7px 0; cursor:pointer;" style-hover="background:#fcb040;">全部重新生成</button>
+        </div>
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:18px 20px;">
+          <div style="font-size:14px; font-weight:600;">出现的集</div>
+          <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
+            <sc-for list="{{ epChips }}" as="c" hint-placeholder-count="9">
+              <a href="集工作区 v2.dc.html" style="font-size:12px; border:1px solid #e4e7eb; border-radius:12px; padding:3px 11px; color:#5b6169; background:#fafbfc;" style-hover="border-color:#18a058; color:#18a058;">{{ c }}</a>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 成本确认框 -->
+  <sc-if value="{{ costModalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:400px; background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 16px 48px rgba(0,0,0,.2);">
+        <div style="font-size:16px; font-weight:600;">批量操作确认</div>
+        <div style="margin-top:10px; font-size:13px; color:#5b6169; line-height:1.7;">将重新生成该角色全部受影响内容（2 张参考图 + 3 张首帧）。</div>
+        <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:10px;">
+          <button onClick="{{ closeCostModal }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">取消</button>
+          <button onClick="{{ closeCostModal }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">确认并创建 Job</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { versionFormOpen: false, costModalOpen: false };
+  renderVals() {
+    return {
+      versionFormOpen: this.state.versionFormOpen,
+      toggleVersionForm: () => this.setState(s => ({ versionFormOpen: !s.versionFormOpen })),
+      costModalOpen: this.state.costModalOpen,
+      openCostModal: () => this.setState({ costModalOpen: true }),
+      closeCostModal: () => this.setState({ costModalOpen: false }),
+      versions: [
+        { name: 'v2', tag: '自动', tagBg: '#eaf3fd', tagFg: '#2080f0', anchor: '来源：第 4 集剧本（母亲的来信）', desc: '米色风衣，长发微卷，夜戏暖光基调。', time: '今天 12:41', thumbBg: '#6b7480', dot: '#18a058', current: true, hasLine: true },
+        { name: 'v1', tag: '自动', tagBg: '#eaf3fd', tagFg: '#2080f0', anchor: '来源：第 1 集剧本（雨夜重逢）', desc: '白衬衫职场装，通勤造型。', time: '3 天前', thumbBg: '#8a8272', dot: '#c2c8ce', current: false, hasLine: true },
+        { name: 'v0', tag: '手动', tagBg: '#f1eafd', tagFg: '#7b5cd6', anchor: '生效锚点：剧情事件 · 全剧开场', desc: '初始人设定稿，作为全剧形象基线。', time: '上周', thumbBg: '#5d6672', dot: '#c2c8ce', current: false, hasLine: false },
+      ],
+      epChips: ['第 1 集','第 2 集','第 3 集','第 4 集','第 6 集','第 8 集','第 9 集','第 10 集','第 12 集'],
+    };
+  }
+}
+</script>
+</body>
+</html>

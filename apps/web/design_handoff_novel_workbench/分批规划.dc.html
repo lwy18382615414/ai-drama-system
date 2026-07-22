@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#f5f7f9;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+</helmet>
+<div style="display:flex; min-height:100vh; color:#1f2225;">
+  <!-- 侧边导航 -->
+  <aside style="width:208px; flex-shrink:0; background:#ffffff; border-right:1px solid #e8eaed; display:flex; flex-direction:column;">
+    <a href="项目列表.dc.html" style="display:block; padding:18px 20px 14px; border-bottom:1px solid #f0f2f4;">
+      <div style="font-size:15px; font-weight:600; color:#1f2225;">晚风照进山海</div>
+      <div style="font-size:12px; color:#8a9099; margin-top:3px;">小说 → 短剧 工作台 · 返回项目列表</div>
+    </a>
+    <nav style="padding:10px 10px; display:flex; flex-direction:column; gap:2px;">
+      <a href="章节与事件.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">章节与事件</a>
+      <div style="padding:8px 12px; border-radius:6px; font-size:13px; background:#e7f5ee; color:#18a058; font-weight:600; cursor:pointer;">分批规划</div>
+      <a href="管线看板.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">集列表 · 看板</a>
+      <a href="资产库.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">资产库</a>
+    </nav>
+  </aside>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <header style="height:52px; background:#ffffff; border-bottom:1px solid #e8eaed; display:flex; align-items:center; gap:16px; padding:0 20px;">
+      <div style="font-size:13px; color:#8a9099;">项目 / <span style="color:#1f2225;">晚风照进山海</span> / 分批规划</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#18a058;"><span style="width:7px; height:7px; border-radius:50%; background:#18a058;"></span>实时已连接</div>
+        <div style="display:flex; align-items:center; gap:8px; border:1px solid #e0e3e7; background:#fff; border-radius:16px; padding:5px 12px 5px 8px; font-size:12px;">
+          <span style="width:16px; height:16px; border-radius:50%; border:2px solid #d6ecdf; border-top-color:#18a058; animation:spin 1s linear infinite; display:inline-block;"></span>
+          2 个进行中
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1; padding:20px 24px 48px; display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; align-items:center;">
+        <div>
+          <h1 style="margin:0; font-size:18px; font-weight:600;">分批规划</h1>
+          <div style="font-size:13px; color:#8a9099; margin-top:4px;">将章节按批次规划为集；重新规划会替换该批次已有的集</div>
+        </div>
+        <button onClick="{{ openNewBatch }}" style="margin-left:auto; border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">新建批次</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <sc-for list="{{ batches }}" as="b" hint-placeholder-count="3">
+          <div style="background:#fff; border:1px solid #e8eaed; border-radius:10px; padding:16px 20px; display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+            <div style="min-width:200px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div style="font-size:14px; font-weight:600;">{{ b.name }}</div>
+                <span style="font-size:11px; border-radius:4px; padding:1px 8px; background:{{ b.tagBg }}; color:{{ b.tagFg }};">{{ b.tag }}</span>
+              </div>
+              <div style="font-size:12px; color:#8a9099; margin-top:4px;">{{ b.range }}</div>
+            </div>
+            <div style="display:flex; gap:28px; font-size:12px; color:#8a9099; flex-wrap:wrap;">
+              <div><div>规划集数</div><div style="font-size:14px; color:#1f2225; font-weight:600; margin-top:3px;">{{ b.eps }}</div></div>
+              <div><div>每集目标时长</div><div style="font-size:14px; color:#1f2225; font-weight:600; margin-top:3px;">{{ b.dur }}</div></div>
+              <div><div>剧本含手工修改</div><div style="font-size:14px; font-weight:600; margin-top:3px; color:{{ b.editColor }};">{{ b.edited }}</div></div>
+              <div><div>规划时间</div><div style="font-size:14px; color:#1f2225; font-weight:600; margin-top:3px;">{{ b.time }}</div></div>
+            </div>
+            <div style="margin-left:auto; display:flex; gap:8px;">
+              <sc-if value="{{ b.planned }}" hint-placeholder-val="{{ true }}">
+                <a href="管线看板.dc.html{{ b.hash }}" style="display:inline-block; border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:5px 12px;" style-hover="border-color:#8a9099; color:#5b6169;">查看集</a>
+                <button onClick="{{ b.replan }}" style="border:1px solid #e0e3e7; background:#fff; color:#18a058; font-size:12px; border-radius:5px; padding:5px 12px; cursor:pointer;" style-hover="border-color:#18a058;">重新规划</button>
+              </sc-if>
+              <sc-if value="{{ b.unplanned }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ b.plan }}" style="border:none; background:#18a058; color:#fff; font-size:12px; border-radius:5px; padding:5px 14px; cursor:pointer;" style-hover="background:#36ad6a;">规划该批次</button>
+              </sc-if>
+              <sc-if value="{{ b.planning }}" hint-placeholder-val="{{ false }}">
+                <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#2080f0; padding:5px 4px;">
+                  <span style="width:11px; height:11px; border-radius:50%; border:2px solid #bcd9f8; border-top-color:#2080f0; animation:spin .9s linear infinite; display:inline-block;"></span>规划中
+                </span>
+                <button onClick="{{ b.cancelPlan }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:5px 12px; cursor:pointer;" style-hover="border-color:#8a9099;">取消规划</button>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:12px; color:#a0a6ad;">重新规划为最重的确认流程：三步向导，含影响预览与显式勾选，无一键直达。被替换的旧集标记为已取代，数据保留。</div>
+    </div>
+  </main>
+
+  <!-- 重规划三步向导 -->
+  <sc-if value="{{ wizardOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:560px; max-width:92vw; background:#fff; border-radius:12px; box-shadow:0 16px 48px rgba(0,0,0,.2); display:flex; flex-direction:column; max-height:88vh;">
+        <div style="padding:20px 24px 0;">
+          <div style="font-size:16px; font-weight:600;">重新规划 · {{ wizBatch }}</div>
+          <!-- 步骤条 -->
+          <div style="margin-top:16px; display:flex; align-items:center; gap:8px;">
+            <sc-for list="{{ steps }}" as="st" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <span style="width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; background:{{ st.bg }}; color:{{ st.fg }}; flex-shrink:0;">{{ st.n }}</span>
+                <span style="font-size:12px; color:{{ st.labelFg }}; white-space:nowrap;">{{ st.label }}</span>
+                <sc-if value="{{ st.hasLine }}" hint-placeholder-val="{{ true }}">
+                  <span style="flex:1; height:1px; background:#e4e7eb;"></span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:1; overflow:auto; padding:20px 24px;">
+          <!-- 第 1 步 -->
+          <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <div>
+                <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">批次范围</div>
+                <select style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                  <option>批次 2 · 第 11–24 章（当前）</option>
+                  <option>批次 2 · 第 11–26 章（向后扩两章）</option>
+                </select>
+              </div>
+              <div style="display:flex; gap:14px;">
+                <div style="flex:1;">
+                  <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">每集目标时长</div>
+                  <select style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                    <option>90 秒</option><option>60 秒</option><option>120 秒</option>
+                  </select>
+                </div>
+                <div style="flex:1;">
+                  <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">节奏偏好</div>
+                  <select style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                    <option>强钩子 · 每集结尾留悬念</option><option>标准</option><option>慢热 · 情感铺陈优先</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">补充说明（可选）</div>
+                <textarea placeholder="如：第 18 章冲突建议拆为两集" style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:9px 12px; font-size:13px; line-height:1.7; font-family:inherit; height:64px; resize:none; outline:none;" style-focus="border-color:#18a058;"></textarea>
+              </div>
+            </div>
+          </sc-if>
+          <!-- 第 2 步：影响预览 -->
+          <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div style="font-size:13px; color:#5b6169;">以下影响由后端计算返回，提交前请确认：</div>
+              <div style="background:#f7f9fa; border:1px solid #edf0f2; border-radius:8px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; font-size:13px;">
+                <div style="display:flex;"><span style="color:#8a9099;">将替换的集</span><span style="margin-left:auto; font-weight:600;">14 集（第 13–26 集）</span></div>
+                <div style="display:flex;"><span style="color:#8a9099;">已生成图片将标记为已取代</span><span style="margin-left:auto; font-weight:600;">63 张</span></div>
+              </div>
+              <div style="background:#fbeef1; border:1px solid #f6d5dd; border-radius:8px; padding:14px 16px;">
+                <div style="font-size:13px; font-weight:600; color:#d03050;">3 集剧本含手工修改，将一并被取代</div>
+                <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+                  <sc-for list="{{ editedEps }}" as="e" hint-placeholder-count="3">
+                    <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#8c2740;">
+                      <span style="width:6px; height:6px; border-radius:50%; background:#d03050; flex-shrink:0;"></span>{{ e }}
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:10px; font-size:12px; color:#a0596c;">旧版剧本数据在提交后仍会保留。</div>
+              </div>
+            </div>
+          </sc-if>
+          <!-- 第 3 步：确认 -->
+          <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <div style="font-size:13px; color:#5b6169; line-height:1.8;">提交后：批次 2 现有 14 集及其剧本、资产连接、分镜与 63 张图片将标记为<b>已取代（superseded）</b>，新的集列表由规划任务生成。此操作不可撤销，但旧数据保留可查。</div>
+              <label style="display:flex; align-items:flex-start; gap:10px; background:#fafbfc; border:1px solid #e4e7eb; border-radius:8px; padding:14px 16px; cursor:pointer;">
+                <input type="checkbox" checked="{{ acked }}" onChange="{{ toggleAck }}" style="accent-color:#18a058; width:15px; height:15px; margin-top:2px; cursor:pointer;" />
+                <span style="font-size:13px; color:#2b2f33; line-height:1.7;">我了解旧内容将被标记为已取代，其中包含 3 集手工修改过的剧本</span>
+              </label>
+            </div>
+          </sc-if>
+        </div>
+        <div style="padding:16px 24px; border-top:1px solid #edf0f2; display:flex; gap:10px;">
+          <button onClick="{{ closeWizard }}" style="border:none; background:none; color:#8a9099; font-size:13px; cursor:pointer; padding:7px 4px;" style-hover="color:#1f2225;">取消</button>
+          <div style="margin-left:auto; display:flex; gap:10px;">
+            <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ back }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">上一步</button>
+            </sc-if>
+            <sc-if value="{{ canNext }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ next }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 18px; cursor:pointer;" style-hover="background:#36ad6a;">下一步</button>
+            </sc-if>
+            <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ submit }}" disabled="{{ submitDisabled }}" style="border:none; background:{{ submitBg }}; color:#fff; font-size:13px; border-radius:6px; padding:7px 18px; cursor:{{ submitCursor }};">提交重规划</button>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 新建批次 -->
+  <sc-if value="{{ newBatchOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:480px; max-width:92vw; background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 16px 48px rgba(0,0,0,.2);">
+        <div style="font-size:16px; font-weight:600;">新建批次</div>
+        <div style="margin-top:6px; font-size:13px; color:#8a9099;">从上一批次末尾接续，规划新的集。新批次不替换任何已有内容。</div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:14px;">
+          <div style="display:flex; gap:14px;">
+            <div style="flex:1;">
+              <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">起始章（自动接续）</div>
+              <input value="第 25 章" disabled="{{ true }}" style="width:100%; border:1px solid #edf0f2; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fafbfc; color:#8a9099;" />
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">结束章</div>
+              <select style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                <option>第 42 章（全部剩余）</option>
+                <option>第 36 章</option>
+                <option>第 32 章</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; gap:14px;">
+            <div style="flex:1;">
+              <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">每集目标时长</div>
+              <select style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                <option>90 秒</option><option>60 秒</option><option>120 秒</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">节奏偏好</div>
+              <select style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                <option>强钩子 · 每集结尾留悬念</option><option>标准</option><option>慢热 · 情感铺陈优先</option>
+              </select>
+            </div>
+          </div>
+          <div style="background:#f7f9fa; border:1px solid #edf0f2; border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; font-size:13px;">
+            <div style="display:flex;"><span style="color:#8a9099;">预计规划集数（后端估算）</span><span style="margin-left:auto; font-weight:600;">约 20 集</span></div>
+          </div>
+        </div>
+        <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:10px;">
+          <button onClick="{{ closeNewBatch }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">取消</button>
+          <button onClick="{{ submitNewBatch }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 18px; cursor:pointer;" style-hover="background:#36ad6a;">确认并创建规划 Job</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 提交成功提示 -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; top:68px; left:50%; transform:translateX(-50%); background:#1f2225; color:#fff; font-size:13px; border-radius:8px; padding:10px 18px; z-index:70; box-shadow:0 8px 24px rgba(0,0,0,.24);">{{ toastMsg }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { wizardOpen: false, wizBatch: '', step: 1, acked: false, toast: false, newBatchOpen: false, toastMsg: '', b3Status: 'pending' };
+
+  renderVals() {
+    const { step, acked } = this.state;
+    const b3s = this.state.b3Status; // 'pending' | 'planning'
+    const batchDefs = [
+      { name: '批次 1', status: 'planned', tag: '已规划', tagBg: '#e7f5ee', tagFg: '#18a058', range: '第 1–10 章 → 第 1–12 集', eps: '12 集', dur: '90 秒', edited: '2 集', editColor: '#ad7a1e', time: '2 周前' },
+      { name: '批次 2', status: 'planned', tag: '已规划', tagBg: '#e7f5ee', tagFg: '#18a058', range: '第 11–24 章 → 第 13–26 集', eps: '14 集', dur: '90 秒', edited: '3 集', editColor: '#ad7a1e', time: '5 天前' },
+      b3s === 'planning'
+        ? { name: '批次 3', status: 'planning', tag: '规划中', tagBg: '#eaf3fd', tagFg: '#2080f0', range: '第 25–42 章 · 规划任务进行中', eps: '约 20 集', dur: '90 秒', edited: '—', editColor: '#8a9099', time: '刚刚' }
+        : { name: '批次 3', status: 'pending', tag: '未规划', tagBg: '#f1f3f5', tagFg: '#a0a6ad', range: '第 25–42 章 · 待规划', eps: '—', dur: '—', edited: '—', editColor: '#8a9099', time: '—' },
+    ];
+    const batches = batchDefs.map((b, i) => ({
+      ...b,
+      hash: '#batch-' + (i + 1),
+      planned: b.status === 'planned',
+      unplanned: b.status === 'pending',
+      planning: b.status === 'planning',
+      cancelPlan: () => this.setState({ b3Status: 'pending' }),
+      replan: () => this.setState({ wizardOpen: true, wizBatch: b.name, step: 1, acked: false }),
+      plan: () => this.setState({ newBatchOpen: true }),
+    }));
+    const stepDefs = [
+      { n: 1, label: '选择批次与参数' },
+      { n: 2, label: '影响预览' },
+      { n: 3, label: '确认提交' },
+    ];
+    const steps = stepDefs.map((s, i) => ({
+      ...s,
+      bg: step > s.n ? '#e7f5ee' : (step === s.n ? '#18a058' : '#f1f3f5'),
+      fg: step > s.n ? '#18a058' : (step === s.n ? '#fff' : '#a0a6ad'),
+      labelFg: step === s.n ? '#1f2225' : '#8a9099',
+      hasLine: i < stepDefs.length - 1,
+    }));
+    return {
+      batches, steps,
+      wizardOpen: this.state.wizardOpen,
+      wizBatch: this.state.wizBatch,
+      isStep1: step === 1, isStep2: step === 2, isStep3: step === 3,
+      canBack: step > 1, canNext: step < 3,
+      acked,
+      toggleAck: () => this.setState(s => ({ acked: !s.acked })),
+      submitDisabled: !acked,
+      submitBg: acked ? '#18a058' : '#bfe3cf',
+      submitCursor: acked ? 'pointer' : 'not-allowed',
+      editedEps: ['第 15 集 · 天台对峙（改写结尾）', '第 19 集 · 合同背后（新增台词）', '第 22 集 · 深夜电话（整场重写）'],
+      next: () => this.setState(s => ({ step: Math.min(3, s.step + 1) })),
+      back: () => this.setState(s => ({ step: Math.max(1, s.step - 1) })),
+      closeWizard: () => this.setState({ wizardOpen: false }),
+      newBatchOpen: this.state.newBatchOpen,
+      openNewBatch: () => this.setState({ newBatchOpen: true }),
+      closeNewBatch: () => this.setState({ newBatchOpen: false }),
+      submitNewBatch: () => {
+        this.setState({ newBatchOpen: false, b3Status: 'planning', toast: true, toastMsg: '已创建批次 3 规划 Job（第 25–42 章）· 可在任务中心查看进度' });
+        clearTimeout(this._t);
+        this._t = setTimeout(() => this.setState({ toast: false }), 4000);
+      },
+      submit: () => {
+        if (!this.state.acked) return;
+        this.setState({ wizardOpen: false, toast: true, toastMsg: '已提交重规划 Job，旧内容已标记为已取代 · 可在任务中心查看进度' });
+        clearTimeout(this._t);
+        this._t = setTimeout(() => this.setState({ toast: false }), 4000);
+      },
+      toast: this.state.toast,
+      toastMsg: this.state.toastMsg,
+    };
+  }
+}
+</script>
+</body>
+</html>

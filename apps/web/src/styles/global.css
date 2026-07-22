@@ -1,0 +1,34 @@
+:root {
+  --color-page-bg: #f5f7f9;
+  --color-card-bg: #ffffff;
+  --color-text-primary: #1f2225;
+  --color-text-secondary: #5b6169;
+  --color-text-weak: #8a9099;
+  --color-primary: #18a058;
+  --color-border-card: #e4e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-page-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

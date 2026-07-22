@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#f5f7f9;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+<div style="min-height:100vh; color:#1f2225; display:flex; flex-direction:column;">
+  <!-- 顶栏 -->
+  <header style="height:56px; background:#fff; border-bottom:1px solid #e4e7eb; display:flex; align-items:center; gap:12px; padding:0 24px; flex-shrink:0;">
+    <div style="width:28px; height:28px; border-radius:8px; background:#18a058; color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center;">漫</div>
+    <div style="font-size:14px; font-weight:600;">AI 漫剧工作台</div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+      <div style="width:28px; height:28px; border-radius:50%; background:#18a058; color:#fff; font-size:12px; display:flex; align-items:center; justify-content:center;">木</div>
+    </div>
+  </header>
+
+  <div style="flex:1; padding:28px 32px 56px;">
+    <div style="display:flex; align-items:center; margin-bottom:20px;">
+      <div>
+        <h1 style="margin:0; font-size:20px; font-weight:600;">项目</h1>
+        <div style="font-size:13px; color:#8a9099; margin-top:4px;">3 个项目 · 2 个有活动任务</div>
+      </div>
+      <button onClick="{{ openNew }}" style="margin-left:auto; border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:8px 18px; cursor:pointer;" style-hover="background:#36ad6a;">+ 新建项目</button>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:18px;">
+      <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+        <div style="position: relative; background: #fff; border: 1px solid #e4e7eb; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: box-shadow .18s, transform .18s, border-color .18s; height: 250px" style-hover="border-color:#c3e6d2; box-shadow:0 10px 28px rgba(31,34,37,.10); transform:translateY(-2px);">
+          <div style="height:172px;">
+            <image-slot id="{{ p.slotId }}" shape="rect" placeholder="{{ p.ph }}"></image-slot>
+          </div>
+          <span style="position:absolute; top:12px; left:12px; font-size:11px; border-radius:10px; padding:2px 10px; background:rgba(255,255,255,.92); color:{{ p.tagFg }}; box-shadow:0 1px 4px rgba(0,0,0,.08);">{{ p.tag }}</span>
+          <div style="padding:16px 18px 18px;">
+            <div style="display:flex; align-items:baseline; gap:10px;">
+              <a href="{{ p.href }}" style="font-size:16px; font-weight:600; color:#1f2225; letter-spacing:.2px;" style-hover="color:#18a058;">{{ p.name }}</a>
+              <a href="{{ p.href }}" style="margin-left:auto; font-size:12px; color:#a0a6ad;" style-hover="color:#18a058;">进入</a>
+            </div>
+            <div style="font-size:12px; color:#a0a6ad; margin-top:6px;">{{ p.meta }} · 更新于{{ p.updated }}</div>
+          </div>
+        </div>
+      </sc-for>
+
+      <!-- 新建项目卡 -->
+      <button onClick="{{ openNew }}" style="border:1.5px dashed #d5d9dd; background:transparent; border-radius:14px; min-height:280px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer; color:#8a9099; font-family:inherit;" style-hover="border-color:#18a058; color:#18a058;">
+        <span style="font-size:28px; font-weight:300; line-height:1;">+</span>
+        <span style="font-size:13px;">导入小说，新建项目</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 新建项目向导 -->
+  <sc-if value="{{ newOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:560px; max-width:92vw; background:#fff; border-radius:12px; box-shadow:0 16px 48px rgba(0,0,0,.2); display:flex; flex-direction:column; max-height:88vh;">
+        <div style="padding:20px 24px 0;">
+          <div style="font-size:16px; font-weight:600;">新建项目</div>
+          <div style="margin-top:14px; display:flex; align-items:center; gap:8px;">
+            <sc-for list="{{ steps }}" as="st" hint-placeholder-count="2">
+              <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <span style="width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; background:{{ st.bg }}; color:{{ st.fg }}; flex-shrink:0;">{{ st.n }}</span>
+                <span style="font-size:12px; color:{{ st.labelFg }}; white-space:nowrap;">{{ st.label }}</span>
+                <sc-if value="{{ st.hasLine }}" hint-placeholder-val="{{ true }}">
+                  <span style="flex:1; height:1px; background:#e4e7eb;"></span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:1; overflow:auto; padding:20px 24px;">
+          <!-- 第 1 步：导入小说 -->
+          <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <div onClick="{{ mockUpload }}" style="border:1.5px dashed {{ dropBorder }}; border-radius:10px; padding:28px 20px; display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; background:{{ dropBg }};" style-hover="border-color:#18a058;">
+                <sc-if value="{{ noFile }}" hint-placeholder-val="{{ true }}">
+                  <span style="font-size:22px; color:#a0a6ad; line-height:1;">↑</span>
+                  <span style="font-size:13px; color:#5b6169;">拖入 .txt / .epub 文件，或点击选择</span>
+                  <span style="font-size:12px; color:#a0a6ad;">也可以在下方直接粘贴正文</span>
+                </sc-if>
+                <sc-if value="{{ hasFile }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:13px; color:#18a058; font-weight:600;">✓ 晚风照进山海.txt</span>
+                  <span style="font-size:12px; color:#8a9099;">128,400 字 · 编码 UTF-8</span>
+                </sc-if>
+              </div>
+              <textarea placeholder="或在此粘贴小说正文…" style="border:1px solid #dfe3e7; border-radius:8px; padding:10px 12px; font-size:12px; line-height:1.7; font-family:inherit; height:72px; resize:none; outline:none;" style-focus="border-color:#18a058;"></textarea>
+              <div>
+                <div style="font-size:12px; color:#5b6169; margin-bottom:6px;">项目名称（自动从文件名识别，可改）</div>
+                <input value="{{ projName }}" onChange="{{ setName }}" style="width:100%; border:1px solid #dfe3e7; border-radius:6px; padding:8px 12px; font-size:13px; font-family:inherit; outline:none;" style-focus="border-color:#18a058;">
+              </div>
+            </div>
+          </sc-if>
+          <!-- 第 2 步：章节切分预览 -->
+          <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:14px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="font-size:13px; color:#5b6169;">切分规则</div>
+                <select style="flex:1; border:1px solid #dfe3e7; border-radius:6px; padding:7px 10px; font-size:13px; font-family:inherit; background:#fff;">
+                  <option>自动识别「第 N 章」标题（推荐）</option>
+                  <option>按空行分段</option>
+                  <option>固定字数切分（约 3000 字/章）</option>
+                </select>
+              </div>
+              <div style="background:#e7f5ee; border:1px solid #c3e6d2; border-radius:8px; padding:10px 14px; font-size:13px; color:#155e38;">✓ 识别到 <b>42</b> 个章节，共 128,400 字，平均每章约 3,057 字</div>
+              <div style="border:1px solid #edf0f2; border-radius:8px; overflow:hidden;">
+                <div style="display:grid; grid-template-columns:56px 1fr 90px; padding:8px 14px; background:#fafbfc; border-bottom:1px solid #edf0f2; font-size:12px; color:#8a9099;">
+                  <div>章节</div><div>标题</div><div style="text-align:right;">字数</div>
+                </div>
+                <sc-for list="{{ previewChapters }}" as="c" hint-placeholder-count="5">
+                  <div style="display:grid; grid-template-columns:56px 1fr 90px; padding:8px 14px; border-bottom:1px solid #f2f4f6; font-size:12px;">
+                    <div style="color:#8a9099;">{{ c.no }}</div><div>{{ c.title }}</div><div style="text-align:right; color:#8a9099;">{{ c.words }}</div>
+                  </div>
+                </sc-for>
+                <div style="padding:8px 14px; font-size:12px; color:#a0a6ad;">… 其余 37 章</div>
+              </div>
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#2b2f33; cursor:pointer;">
+                <input type="checkbox" checked="{{ autoExtract }}" onChange="{{ toggleExtract }}" style="accent-color:#18a058; width:14px; height:14px; cursor:pointer;">
+                创建后自动开始事件抽取（可在任务中心取消）
+              </label>
+            </div>
+          </sc-if>
+        </div>
+        <div style="padding:16px 24px; border-top:1px solid #edf0f2; display:flex; gap:10px;">
+          <button onClick="{{ closeNew }}" style="border:none; background:none; color:#8a9099; font-size:13px; cursor:pointer; padding:7px 4px;" style-hover="color:#1f2225;">取消</button>
+          <div style="margin-left:auto; display:flex; gap:10px;">
+            <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ back }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">上一步</button>
+              <a href="章节与事件.dc.html" style="display:inline-block; border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 18px;" style-hover="background:#36ad6a; color:#fff;">创建项目</a>
+            </sc-if>
+            <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ next }}" disabled="{{ nextDisabled }}" style="border:none; background:{{ nextBg }}; color:#fff; font-size:13px; border-radius:6px; padding:7px 18px; cursor:{{ nextCursor }};">下一步</button>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { newOpen: false, step: 1, file: false, projName: '', autoExtract: true };
+
+  renderVals() {
+    const { step, file } = this.state;
+    const stepDefs = [{ n: 1, label: '导入小说' }, { n: 2, label: '章节切分预览' }];
+    return {
+      newOpen: this.state.newOpen,
+      openNew: () => this.setState({ newOpen: true, step: 1, file: false, projName: '' }),
+      closeNew: () => this.setState({ newOpen: false }),
+      steps: stepDefs.map((s, i) => ({
+        ...s,
+        bg: step > s.n ? '#e7f5ee' : (step === s.n ? '#18a058' : '#f1f3f5'),
+        fg: step > s.n ? '#18a058' : (step === s.n ? '#fff' : '#a0a6ad'),
+        labelFg: step === s.n ? '#1f2225' : '#8a9099',
+        hasLine: i < stepDefs.length - 1,
+      })),
+      isStep1: step === 1, isStep2: step === 2,
+      noFile: !file, hasFile: file,
+      dropBorder: file ? '#c3e6d2' : '#d5d9dd',
+      dropBg: file ? '#f4faf6' : 'transparent',
+      mockUpload: () => this.setState({ file: true, projName: this.state.projName || '晚风照进山海' }),
+      projName: this.state.projName,
+      setName: e => this.setState({ projName: e.target.value }),
+      nextDisabled: !file,
+      nextBg: file ? '#18a058' : '#bfe3cf',
+      nextCursor: file ? 'pointer' : 'not-allowed',
+      next: () => { if (this.state.file) this.setState({ step: 2 }); },
+      back: () => this.setState({ step: 1 }),
+      autoExtract: this.state.autoExtract,
+      toggleExtract: () => this.setState(s => ({ autoExtract: !s.autoExtract })),
+      previewChapters: [
+        { no: '01', title: '雨夜的电话', words: '3,214' },
+        { no: '02', title: '回到镇上', words: '2,876' },
+        { no: '03', title: '老宅', words: '3,540' },
+        { no: '04', title: '母亲的来信', words: '3,102' },
+        { no: '05', title: '阁楼里的木箱', words: '2,988' },
+      ],
+      projects: [
+        { name: '晚风照进山海', tag: '制作中', tagBg: '#eaf3fd', tagFg: '#2080f0',
+          meta: '已规划 26 集', pct: '58%', updated: '5 分钟前',
+          jobs: 2, hasJobs: true, stale: 12, hasStale: true, failed: 0, hasFailed: false, clean: false,
+          slotId: 'proj-wanfeng', ph: '项目封面', href: '管线看板.dc.html' },
+        { name: '雾都遗案', tag: '制作中', tagBg: '#eaf3fd', tagFg: '#2080f0',
+          meta: '已规划 40 集', pct: '82%', updated: '2 小时前',
+          jobs: 1, hasJobs: true, stale: 0, hasStale: false, failed: 3, hasFailed: true, clean: false,
+          slotId: 'proj-wudu', ph: '项目封面', href: '管线看板.dc.html' },
+        { name: '春日快递站', tag: '已完结', tagBg: '#e7f5ee', tagFg: '#18a058',
+          meta: '24 集全部完成', pct: '100%', updated: '3 周前',
+          jobs: 0, hasJobs: false, stale: 0, hasStale: false, failed: 0, hasFailed: false, clean: true,
+          slotId: 'proj-chunri', ph: '项目封面', href: '管线看板.dc.html' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

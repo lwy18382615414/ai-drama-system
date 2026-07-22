@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#f5f7f9;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+<div style="display:flex; min-height:100vh; color:#1f2225;">
+  <!-- 侧边导航 -->
+  <aside style="width:208px; flex-shrink:0; background:#ffffff; border-right:1px solid #e8eaed; display:flex; flex-direction:column;">
+    <a href="项目列表.dc.html" style="display:block; padding:18px 20px 14px; border-bottom:1px solid #f0f2f4;">
+      <div style="font-size:15px; font-weight:600; color:#1f2225;">晚风照进山海</div>
+      <div style="font-size:12px; color:#8a9099; margin-top:3px;">小说 → 短剧 工作台 · 返回项目列表</div>
+    </a>
+    <nav style="padding:10px 10px; display:flex; flex-direction:column; gap:2px;">
+      <a href="章节与事件.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">章节与事件</a>
+      <a href="分批规划.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">分批规划</a>
+      <a href="管线看板.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">集列表 · 看板</a>
+      <div style="padding:8px 12px; border-radius:6px; font-size:13px; background:#e7f5ee; color:#18a058; font-weight:600; cursor:pointer;">资产库</div>
+    </nav>
+  </aside>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <header style="height:52px; background:#ffffff; border-bottom:1px solid #e8eaed; display:flex; align-items:center; gap:16px; padding:0 20px;">
+      <div style="font-size:13px; color:#8a9099;">项目 / <span style="color:#1f2225;">晚风照进山海</span> / 资产库</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#18a058;"><span style="width:7px; height:7px; border-radius:50%; background:#18a058;"></span>实时已连接</div>
+        <div style="display:flex; align-items:center; gap:8px; border:1px solid #e0e3e7; background:#fff; border-radius:16px; padding:5px 12px 5px 8px; font-size:12px;">
+          <span style="width:16px; height:16px; border-radius:50%; border:2px solid #d6ecdf; border-top-color:#18a058; animation:spin 1s linear infinite; display:inline-block;"></span>
+          2 个进行中
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1; padding:20px 24px 48px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; align-items:center;">
+        <div>
+          <h1 style="margin:0; font-size:18px; font-weight:600;">资产库</h1>
+          <div style="font-size:13px; color:#8a9099; margin-top:4px;">项目级复用：角色 8 · 场景 12 · 道具 9 · 其中 4 项内容过期</div>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:10px;">
+          <input placeholder="搜索资产…" style="border:1px solid #e0e3e7; border-radius:6px; padding:7px 12px; font-size:13px; font-family:inherit; outline:none; width:200px;" style-focus="border-color:#18a058;" />
+          <button style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">新建资产</button>
+        </div>
+      </div>
+
+      <!-- 类型切换 -->
+      <div style="display:flex; gap:8px;">
+        <sc-for list="{{ typeTabs }}" as="t" hint-placeholder-count="3">
+          <button onClick="{{ t.go }}" style="border:1px solid {{ t.border }}; background:{{ t.bg }}; color:{{ t.fg }}; font-size:13px; border-radius:16px; padding:6px 16px; cursor:pointer; font-weight:{{ t.weight }};">{{ t.name }}</button>
+        </sc-for>
+      </div>
+
+      <!-- 角色 -->
+      <sc-if value="{{ isChars }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px;">
+          <sc-for list="{{ chars }}" as="c" hint-placeholder-count="6">
+            <div style="position:relative; background:#fff; border:1px solid {{ c.border }}; border-radius:12px; padding:16px 18px;">
+              <sc-if value="{{ c.stale }}" hint-placeholder-val="{{ false }}">
+                <span title="{{ c.staleTip }}" style="position:absolute; top:12px; right:12px; font-size:11px; background:#fdf3e3; color:#ad7a1e; border:1px solid #f3e3bf; border-radius:4px; padding:2px 7px;">{{ c.staleN }} 项过期</span>
+              </sc-if>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <image-slot id="{{ c.slotId }}" shape="rounded" radius="10" placeholder="头像" style="width:52px; height:52px; flex-shrink:0;"></image-slot>
+                <div style="min-width:0;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:14px; font-weight:600;">{{ c.name }}</span>
+                    <span style="font-size:11px; border-radius:4px; padding:1px 7px; background:{{ c.roleBg }}; color:{{ c.roleFg }};">{{ c.role }}</span>
+                  </div>
+                  <div style="font-size:12px; color:#8a9099; margin-top:3px;">{{ c.meta }}</div>
+                </div>
+              </div>
+              <div style="margin-top:12px; font-size:12px; color:#5b6169; line-height:1.7; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ c.desc }}</div>
+              <div style="margin-top:12px; display:flex; align-items:center; gap:8px;">
+                <a href="资产详情.dc.html" style="display:inline-block; border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px;" style-hover="border-color:#8a9099; color:#5b6169;">详情</a>
+                <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer;" style-hover="border-color:#18a058; color:#18a058;">重新生成</button>
+                <span style="margin-left:auto; font-size:12px; color:#a0a6ad;">{{ c.versions }} 个形象版本</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- 场景 -->
+      <sc-if value="{{ isScenes }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px;">
+          <sc-for list="{{ scenes }}" as="s" hint-placeholder-count="6">
+            <div style="position:relative; background:#fff; border:1px solid {{ s.border }}; border-radius:12px; overflow:hidden;">
+              <div style="height:120px;">
+                <image-slot id="{{ s.slotId }}" shape="rect" placeholder="{{ s.ph }}"></image-slot>
+              </div>
+              <sc-if value="{{ s.stale }}" hint-placeholder-val="{{ false }}">
+                <span title="已过期（上游剧本已修改）" style="position:absolute; top:8px; right:8px; font-size:11px; background:#fdf3e3; color:#ad7a1e; border:1px solid #f3e3bf; border-radius:4px; padding:1px 7px;">已过期</span>
+              </sc-if>
+              <div style="padding:12px 14px;">
+                <div style="font-size:13px; font-weight:600;">{{ s.name }}</div>
+                <div style="font-size:12px; color:#8a9099; margin-top:3px;">{{ s.meta }}</div>
+                <div style="margin-top:10px; display:flex; gap:8px;">
+                  <a href="场景详情.dc.html" style="display:inline-block; border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px;" style-hover="border-color:#8a9099; color:#5b6169;">详情</a>
+                  <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer;" style-hover="border-color:#18a058; color:#18a058;">重新生成</button>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- 道具 -->
+      <sc-if value="{{ isProps }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px;">
+          <sc-for list="{{ props }}" as="p" hint-placeholder-count="6">
+            <div style="background:#fff; border:1px solid #e8eaed; border-radius:12px; padding:16px 18px; display:flex; align-items:center; gap:12px;">
+              <div style="width:44px; height:44px; border-radius:10px; background:#eef1f3; display:flex; align-items:center; justify-content:center; font-size:14px; color:#8a9099; flex-shrink:0;">{{ p.initial }}</div>
+              <div style="min-width:0; flex:1;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:13px; font-weight:600;">{{ p.name }}</span>
+                  <sc-if value="{{ p.key }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:11px; background:#f1eafd; color:#7b5cd6; border-radius:4px; padding:1px 7px;">关键</span>
+                  </sc-if>
+                </div>
+                <div style="font-size:12px; color:#8a9099; margin-top:3px;">{{ p.meta }}</div>
+              </div>
+              <button onClick="{{ p.open }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer; flex-shrink:0;" style-hover="border-color:#8a9099;">详情</button>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+
+  <!-- 道具详情抽屉 -->
+  <sc-if value="{{ propOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeProp }}" style="position:fixed; inset:0; background:rgba(15,18,20,.28); z-index:50;"></div>
+    <div style="position:fixed; top:0; right:0; bottom:0; width:400px; background:#fff; z-index:51; box-shadow:-8px 0 24px rgba(0,0,0,.12); display:flex; flex-direction:column;">
+      <div style="display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid #edf0f2;">
+        <div style="width:40px; height:40px; border-radius:10px; background:#eef1f3; display:flex; align-items:center; justify-content:center; font-size:14px; color:#8a9099;">{{ curProp.initial }}</div>
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:15px; font-weight:600;">{{ curProp.name }}</span>
+            <sc-if value="{{ curProp.key }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:11px; background:#f1eafd; color:#7b5cd6; border-radius:4px; padding:1px 7px;">关键道具</span>
+            </sc-if>
+          </div>
+          <div style="font-size:12px; color:#8a9099; margin-top:2px;">{{ curProp.meta }}</div>
+        </div>
+        <button onClick="{{ closeProp }}" style="margin-left:auto; border:none; background:none; font-size:16px; color:#8a9099; cursor:pointer;" style-hover="color:#1f2225;">✕</button>
+      </div>
+      <div style="flex:1; overflow:auto; padding:18px 20px; display:flex; flex-direction:column; gap:18px;">
+        <sc-if value="{{ curProp.key }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:12px; color:#a0a6ad; letter-spacing:.4px; margin-bottom:8px;">参考图</div>
+            <div style="height:180px;">
+              <image-slot id="{{ curProp.slotId }}" shape="rounded" radius="10" placeholder="道具参考图"></image-slot>
+            </div>
+          </div>
+        </sc-if>
+        <div>
+          <div style="font-size:12px; color:#a0a6ad; letter-spacing:.4px; margin-bottom:8px;">描述</div>
+          <div style="font-size:13px; line-height:1.8; color:#2b2f33; background:#fafbfc; border:1px solid #edf0f2; border-radius:8px; padding:12px 14px;">{{ curProp.desc }}</div>
+        </div>
+        <sc-if value="{{ curProp.hasStates }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:12px; color:#a0a6ad; letter-spacing:.4px; margin-bottom:8px;">状态变化（影响画面一致性）</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <sc-for list="{{ curProp.states }}" as="st" hint-placeholder-count="2">
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#5b6169;">
+                  <span style="width:6px; height:6px; border-radius:50%; background:#2080f0; flex-shrink:0;"></span>{{ st }}
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <div>
+          <div style="font-size:12px; color:#a0a6ad; letter-spacing:.4px; margin-bottom:8px;">持有 / 关联角色</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <sc-for list="{{ curProp.who }}" as="w" hint-placeholder-count="2">
+              <a href="资产详情.dc.html" style="font-size:12px; border:1px solid #e4e7eb; border-radius:12px; padding:3px 11px; color:#5b6169; background:#fafbfc;" style-hover="border-color:#18a058; color:#18a058;">{{ w }}</a>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px; color:#a0a6ad; letter-spacing:.4px; margin-bottom:8px;">出现的集</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <sc-for list="{{ curProp.eps }}" as="e" hint-placeholder-count="2">
+              <a href="集工作区 v2.dc.html" style="font-size:12px; border:1px solid #e4e7eb; border-radius:12px; padding:3px 11px; color:#5b6169; background:#fafbfc;" style-hover="border-color:#18a058; color:#18a058;">{{ e }}</a>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <div style="padding:12px 20px; border-top:1px solid #edf0f2; display:flex; gap:10px;">
+        <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 14px; cursor:pointer;" style-hover="border-color:#8a9099;">编辑描述</button>
+        <sc-if value="{{ curProp.key }}" hint-placeholder-val="{{ false }}">
+          <button style="margin-left:auto; border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">重新生成参考图</button>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { type: 'chars', propIdx: null };
+
+  renderVals() {
+    const type = this.state.type;
+    const tabDefs = [
+      { key: 'chars', name: '角色 8' },
+      { key: 'scenes', name: '场景 12' },
+      { key: 'props', name: '道具 9' },
+    ];
+    const typeTabs = tabDefs.map(t => ({
+      name: t.name,
+      go: () => this.setState({ type: t.key }),
+      bg: type === t.key ? '#e7f5ee' : '#fff',
+      fg: type === t.key ? '#18a058' : '#5b6169',
+      border: type === t.key ? '#c3e6d2' : '#e0e3e7',
+      weight: type === t.key ? 600 : 400,
+    }));
+    const ch = (name, role, main, meta, desc, versions, staleN, slotId) => ({
+      name, role, meta, desc, versions, slotId,
+      roleBg: main ? '#e7f5ee' : '#f1f3f5', roleFg: main ? '#18a058' : '#5b6169',
+      stale: staleN > 0, staleN,
+      staleTip: '角色描述修改后，参考图 / 首帧已标记过期',
+      border: staleN > 0 ? '#f3e3bf' : '#e8eaed',
+    });
+    const sc = (name, meta, stale, slotId, ph) => ({
+      name, meta, stale, slotId, ph,
+      border: stale ? '#f3e3bf' : '#e8eaed',
+    });
+    return {
+      isChars: type === 'chars', isScenes: type === 'scenes', isProps: type === 'props',
+      typeTabs,
+      chars: [
+        ch('林晚', '女主', true, '出现于 9 集 · 形象 v2', '28 岁，都市白领气质，长发微卷，常穿米色风衣。眼神克制而坚韧。', 3, 5, 'lib-linwan'),
+        ch('沈亦舟', '男主', true, '出现于 8 集 · 形象 v1', '32 岁，建筑设计师，沉稳内敛，深色大衣，说话总留三分。', 1, 0, 'lib-shenyizhou'),
+        ch('母亲（回忆）', '配角', false, '出现于 4 集 · 形象 v1', '回忆中的年轻母亲，背竹篓走山道，笑容温暖，画面泛黄。', 1, 2, 'lib-mother'),
+        ch('陈叔', '配角', false, '出现于 5 集 · 形象 v1', '守着老宅的邻居长辈，寡言，知道当年的部分真相。', 1, 0, 'lib-chenshu'),
+        ch('周经理', '配角', false, '出现于 3 集 · 形象 v1', '合同事件的关键人物，西装革履，笑里藏刀。', 1, 0, 'lib-zhou'),
+        ch('小卖部阿婆', '群像', false, '出现于 2 集 · 形象 v1', '镇口小卖部的阿婆，消息灵通。', 1, 0, 'lib-apo'),
+      ],
+      scenes: [
+        sc('老宅堂屋 · 夜', '出现于 6 集', true, 'lib-tangwu', '堂屋参考图'),
+        sc('老宅阁楼 · 夜', '出现于 3 集', false, 'lib-gelou', '阁楼参考图'),
+        sc('山道 · 日（回忆）', '出现于 4 集', true, 'lib-shandao', '山道参考图'),
+        sc('镇口街道 · 日', '出现于 5 集', false, 'lib-jiedao', '街道参考图'),
+        sc('医院走廊 · 夜', '出现于 2 集', false, 'lib-yiyuan', '医院参考图'),
+        sc('写字楼办公室 · 日', '出现于 4 集', false, 'lib-office', '办公室参考图'),
+      ],
+      props: this.propsData().map((p, i) => ({
+        ...p,
+        open: () => this.setState({ propIdx: i }),
+      })),
+      propOpen: this.state.propIdx !== null,
+      closeProp: () => this.setState({ propIdx: null }),
+      curProp: this.propsData()[this.state.propIdx ?? 0],
+    };
+  }
+
+  propsData() {
+    return [
+      { name: '泛黄的信', initial: '信', meta: '出现于 3 集', key: true, slotId: 'prop-letter',
+        desc: '母亲留下的信，信封泛黄无署名。信纸展开可见毛笔字迹「山海之间」。全剧核心线索。',
+        hasStates: true, states: ['第 4 集前：信封未拆，压在堂屋条案抽屉', '第 4 集起：信纸展开，字迹特写可见', '第 11 集起：信纸边缘有泪渍与折痕'],
+        who: ['林晚', '母亲（回忆）'], eps: ['第 4 集', '第 8 集', '第 11 集'] },
+      { name: '铜锁木箱', initial: '箱', meta: '出现于 2 集', key: true, slotId: 'prop-box',
+        desc: '阁楼里的旧木箱，铜锁锈死。箱体有雕花，母亲的遗物藏于其中。',
+        hasStates: true, states: ['第 4 集：铜锁锈死，未打开', '第 5 集起：锁被撬开，箱盖开启'],
+        who: ['林晚'], eps: ['第 4 集', '第 5 集'] },
+      { name: '竹篓', initial: '篓', meta: '出现于 2 集', key: false, slotId: 'prop-basket',
+        desc: '母亲回忆片段中背的竹篓，旧藤编织。', hasStates: false, states: [],
+        who: ['母亲（回忆）'], eps: ['第 4 集', '第 7 集'] },
+      { name: '合同文件', initial: '合', meta: '出现于 2 集', key: true, slotId: 'prop-contract',
+        desc: '周经理递出的收购合同，牛皮纸袋装。第 8 集特写签名页。',
+        hasStates: true, states: ['第 5 集：密封在牛皮纸袋中', '第 8 集起：已拆封，签名页有折角'],
+        who: ['周经理', '林晚'], eps: ['第 5 集', '第 8 集'] },
+      { name: '旧手电筒', initial: '电', meta: '出现于 1 集', key: false, slotId: 'prop-torch',
+        desc: '老式铁壳手电筒，光柱偏黄。', hasStates: false, states: [],
+        who: ['林晚'], eps: ['第 4 集'] },
+      { name: '婚礼请柬', initial: '柬', meta: '出现于 1 集', key: false, slotId: 'prop-invite',
+        desc: '烫金红色请柬。', hasStates: false, states: [],
+        who: ['沈亦舟'], eps: ['第 8 集'] },
+    ];
+  }
+}
+</script>
+</body>
+</html>

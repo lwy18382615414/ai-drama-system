@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#f5f7f9;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+</helmet>
+<div style="display:flex; min-height:100vh; color:#1f2225;">
+  <!-- 侧边导航 -->
+  <aside style="width:208px; flex-shrink:0; background:#ffffff; border-right:1px solid #e8eaed; display:flex; flex-direction:column;">
+    <a href="项目列表.dc.html" style="display:block; padding:18px 20px 14px; border-bottom:1px solid #f0f2f4;">
+      <div style="font-size:15px; font-weight:600; color:#1f2225;">晚风照进山海</div>
+      <div style="font-size:12px; color:#8a9099; margin-top:3px;">小说 → 短剧 工作台 · 返回项目列表</div>
+    </a>
+    <nav style="padding:10px 10px; display:flex; flex-direction:column; gap:2px;">
+      <a href="章节与事件.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">章节与事件</a>
+      <a href="分批规划.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">分批规划</a>
+      <div style="padding:8px 12px; border-radius:6px; font-size:13px; background:#e7f5ee; color:#18a058; font-weight:600; cursor:pointer;">集列表 · 看板</div>
+      <a href="资产库.dc.html" style="padding:8px 12px; border-radius:6px; font-size:13px; color:#5b6169; display:block;" style-hover="background:#f4f6f8; color:#5b6169;">资产库</a>
+    </nav>
+  </aside>
+
+  <!-- 主区 -->
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <!-- 顶栏 -->
+    <header style="height:52px; background:#ffffff; border-bottom:1px solid #e8eaed; display:flex; align-items:center; gap:16px; padding:0 20px;">
+      <div style="font-size:13px; color:#8a9099;">项目 / <span style="color:#1f2225;">晚风照进山海</span> / 集列表</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+        <sc-if value="{{ sseOk }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#18a058;"><span style="width:7px; height:7px; border-radius:50%; background:#18a058;"></span>实时已连接</div>
+        </sc-if>
+        <button onClick="{{ toggleDrawer }}" title="任务中心" style="display:flex; align-items:center; gap:8px; border:1px solid #e0e3e7; background:#fff; border-radius:16px; padding:5px 12px 5px 8px; cursor:pointer; font-size:12px; color:#1f2225;" style-hover="border-color:#18a058;">
+          <span style="width:16px; height:16px; border-radius:50%; border:2px solid #d6ecdf; border-top-color:#18a058; animation:spin 1s linear infinite; display:inline-block;"></span>
+          {{ activeJobCount }} 个进行中
+        </button>
+        <div style="width:28px; height:28px; border-radius:50%; background:#18a058; color:#fff; font-size:12px; display:flex; align-items:center; justify-content:center;">木</div>
+      </div>
+    </header>
+
+    <!-- SSE 断线横幅 -->
+    <sc-if value="{{ sseDown }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#fdf3e3; border-bottom:1px solid #f5e2bb; color:#8a6116; font-size:13px; padding:8px 20px;">实时连接已断开，正在以 10 秒间隔轮询，数据可能略有延迟。</div>
+    </sc-if>
+
+    <div style="padding:20px 24px 96px; display:flex; flex-direction:column; gap:14px;">
+      <!-- 页头 -->
+      <div style="display:flex; align-items:baseline; gap:12px;">
+        <h1 style="margin:0; font-size:18px; font-weight:600;">管线看板</h1>
+        <div style="font-size:13px; color:#8a9099;">24 集 · 事件 → 规划 → 剧本 → 资产 → 分镜 → 图片</div>
+        <sc-if value="{{ batchFilter }}" hint-placeholder-val="{{ false }}">
+          <span style="display:inline-flex; align-items:center; gap:8px; font-size:12px; background:#e7f5ee; color:#18a058; border:1px solid #c3e6d2; border-radius:14px; padding:4px 6px 4px 12px;">
+            {{ batchFilterLabel }}
+            <button onClick="{{ clearBatchFilter }}" title="清除筛选" style="border:none; background:#d2ecdd; color:#18a058; width:16px; height:16px; border-radius:50%; font-size:11px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
+          </span>
+        </sc-if>
+      </div>
+
+      <!-- stale 汇总条 -->
+      <div style="display:flex; align-items:center; gap:10px; background:#fdf6e9; border:1px solid #f3e3bf; border-radius:8px; padding:10px 14px;">
+        <span style="width:8px; height:8px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>
+        <span style="font-size:13px; color:#7a5a14;">本项目有 <b>12</b> 项内容因上游修改而过期</span>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button style="border:1px solid #e6d5a8; background:#fff; color:#8a6116; font-size:12px; border-radius:5px; padding:5px 12px; cursor:pointer;" style-hover="border-color:#f0a020;">查看过期项</button>
+          <button onClick="{{ openStaleModal }}" style="border:none; background:#f0a020; color:#fff; font-size:12px; border-radius:5px; padding:5px 12px; cursor:pointer;" style-hover="background:#fcb040;">全部重新生成</button>
+        </div>
+      </div>
+
+      <!-- 看板表 -->
+      <div style="background:#fff; border:1px solid #e8eaed; border-radius:10px; overflow:hidden;">
+        <div style="display:grid; grid-template-columns:44px 168px repeat(6, 1fr) 72px; align-items:center; padding:10px 16px; border-bottom:1px solid #edf0f2; background:#fafbfc; font-size:12px; color:#8a9099;">
+          <div><input type="checkbox" checked="{{ allSelected }}" onChange="{{ toggleAll }}" style="accent-color:#18a058; width:14px; height:14px; cursor:pointer;" /></div>
+          <div>集</div>
+          <div style="text-align:center;">事件</div>
+          <div style="text-align:center;">规划</div>
+          <div style="text-align:center;">剧本</div>
+          <div style="text-align:center;">资产</div>
+          <div style="text-align:center;">分镜</div>
+          <div style="text-align:center;">图片</div>
+          <div></div>
+        </div>
+        <sc-for list="{{ episodes }}" as="ep" hint-placeholder-count="8">
+          <div style="display:grid; grid-template-columns:44px 168px repeat(6, 1fr) 72px; align-items:center; padding:9px 16px; border-bottom:1px solid #f2f4f6; background:{{ ep.rowBg }};" style-hover="background:#f8fafb;">
+            <div><input type="checkbox" checked="{{ ep.selected }}" onChange="{{ ep.toggle }}" style="accent-color:#18a058; width:14px; height:14px; cursor:pointer;" /></div>
+            <div style="min-width:0;">
+              <div style="font-size:13px; font-weight:600;">{{ ep.no }}</div>
+              <div style="font-size:12px; color:#8a9099; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ ep.title }}</div>
+            </div>
+            <sc-for list="{{ ep.stages }}" as="st" hint-placeholder-count="6">
+              <div style="display:flex; justify-content:center; padding:0 4px;">
+                <div title="{{ st.tip }}" style="position:relative; width:100%; max-width:96px; height:34px; border-radius:6px; display:flex; align-items:center; justify-content:center; gap:5px; font-size:12px; cursor:{{ st.cursor }}; background:{{ st.bg }}; color:{{ st.fg }}; border:1px solid {{ st.border }};">
+                  <sc-if value="{{ st.spin }}" hint-placeholder-val="{{ false }}">
+                    <span style="width:11px; height:11px; border-radius:50%; border:2px solid #bcd9f8; border-top-color:#2080f0; animation:spin .9s linear infinite; display:inline-block;"></span>
+                  </sc-if>
+                  {{ st.label }}
+                  <sc-if value="{{ st.stale }}" hint-placeholder-val="{{ false }}">
+                    <span style="position:absolute; top:-4px; right:-4px; width:9px; height:9px; border-radius:50%; background:#f0a020; border:2px solid #fff;"></span>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <div style="text-align:right;"><a href="集工作区 v2.dc.html" style="font-size:12px;">打开</a></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:12px; color:#a0a6ad;">悬浮阶段格查看原因；stale（黄）不影响浏览，仅阻断下游生成。数百集时该列表启用虚拟滚动。</div>
+    </div>
+  </main>
+
+  <!-- 批量操作栏 -->
+  <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#1f2225; color:#fff; border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:10px; box-shadow:0 8px 24px rgba(0,0,0,.24); z-index:40;">
+      <span style="font-size:13px;">已选 <b>{{ selectedCount }}</b> 集</span>
+      <span style="width:1px; height:18px; background:#3d4248;"></span>
+      <button style="border:1px solid #4a5056; background:transparent; color:#e6e9ec; font-size:12px; border-radius:6px; padding:6px 12px; cursor:pointer;" style-hover="border-color:#8a9099;">生成剧本</button>
+      <button style="border:1px solid #4a5056; background:transparent; color:#e6e9ec; font-size:12px; border-radius:6px; padding:6px 12px; cursor:pointer;" style-hover="border-color:#8a9099;">生成分镜</button>
+      <button onClick="{{ openCostModal }}" style="border:none; background:#18a058; color:#fff; font-size:12px; border-radius:6px; padding:6px 14px; cursor:pointer;" style-hover="background:#36ad6a;">生成全部图片</button>
+      <button onClick="{{ clearSelection }}" style="border:none; background:transparent; color:#8a9099; font-size:12px; cursor:pointer; padding:6px 4px;" style-hover="color:#fff;">取消</button>
+    </div>
+  </sc-if>
+
+  <!-- 任务中心抽屉 -->
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ toggleDrawer }}" style="position:fixed; inset:0; background:rgba(15,18,20,.28); z-index:50;"></div>
+    <div style="position:fixed; top:0; right:0; bottom:0; width:380px; background:#fff; z-index:51; box-shadow:-8px 0 24px rgba(0,0,0,.12); display:flex; flex-direction:column;">
+      <div style="display:flex; align-items:center; padding:16px 18px; border-bottom:1px solid #edf0f2;">
+        <div style="font-size:15px; font-weight:600;">任务中心</div>
+        <button onClick="{{ toggleDrawer }}" style="margin-left:auto; border:none; background:none; font-size:16px; color:#8a9099; cursor:pointer;" style-hover="color:#1f2225;">✕</button>
+      </div>
+      <div style="flex:1; overflow:auto; padding:14px 18px; display:flex; flex-direction:column; gap:12px;">
+        <sc-for list="{{ jobs }}" as="job" hint-placeholder-count="3">
+          <div style="border:1px solid #e8eaed; border-radius:8px; padding:12px 14px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-size:13px; font-weight:600;">{{ job.name }}</div>
+              <div style="margin-left:auto; font-size:12px; color:{{ job.metaColor }};">{{ job.meta }}</div>
+            </div>
+            <sc-if value="{{ job.active }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:10px; height:6px; border-radius:3px; background:#eef1f3; overflow:hidden;">
+                <div style="height:100%; border-radius:3px; background:#18a058; width:{{ job.pct }};"></div>
+              </div>
+              <div style="margin-top:10px; display:flex; gap:8px;">
+                <sc-if value="{{ job.hasFailed }}" hint-placeholder-val="{{ false }}">
+                  <button style="border:1px solid #f0c4cf; background:#fff; color:#d03050; font-size:12px; border-radius:5px; padding:4px 10px; cursor:pointer;" style-hover="border-color:#d03050;">重试失败项</button>
+                </sc-if>
+                <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 10px; cursor:pointer;" style-hover="border-color:#8a9099;">取消 Job</button>
+                <button style="border:none; background:none; color:#8a9099; font-size:12px; cursor:pointer;" style-hover="color:#1f2225;">展开子任务</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ job.done }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:6px; font-size:12px; color:#8a9099;">{{ job.doneNote }} · <a href="#">跳转到该集</a></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:12px 18px; border-top:1px solid #edf0f2; font-size:12px; color:#8a9099;">已结算 Job 保留最近 20 条 · <a href="#">任务历史</a></div>
+    </div>
+  </sc-if>
+
+  <!-- 批量操作确认框 -->
+  <sc-if value="{{ costModalOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:400px; background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 16px 48px rgba(0,0,0,.2);">
+        <div style="font-size:16px; font-weight:600;">批量操作确认</div>
+        <div style="margin-top:10px; font-size:13px; color:#5b6169; line-height:1.7;">{{ costModalDesc }}</div>
+        <div style="margin-top:14px; background:#f7f9fa; border:1px solid #edf0f2; border-radius:8px; padding:12px 14px; display:flex; flex-direction:column; gap:6px; font-size:13px;">
+          <div style="display:flex;"><span style="color:#8a9099;">图片张数</span><span style="margin-left:auto; font-weight:600;">{{ costImages }} 张</span></div>
+        </div>
+        <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:10px;">
+          <button onClick="{{ closeCostModal }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">取消</button>
+          <button onClick="{{ confirmCost }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">确认并创建 Job</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;sseConnected&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;演示状态&quot; }
+}">
+class Component extends DCLogic {
+  state = {
+    selected: {}, drawerOpen: false, costModalOpen: false, costCtx: null,
+    extraJobs: [], batchFilter: null,
+  };
+
+  componentDidMount() {
+    const m = (location.hash || '').match(/batch-(\d)/);
+    if (m) this.setState({ batchFilter: Number(m[1]) });
+  }
+
+  episodesData() {
+    // status per stage: 事件 规划 剧本 资产 分镜 图片
+    return [
+      { no: '第 1 集', title: '雨夜重逢', st: ['ready','ready','ready','ready','ready','ready'] },
+      { no: '第 2 集', title: '旧照片的秘密', st: ['ready','ready','ready','ready','ready','running'] },
+      { no: '第 3 集', title: '天台对峙', st: ['ready','ready','ready','ready','running','not_started'] },
+      { no: '第 4 集', title: '母亲的来信', st: ['ready','ready','stale','stale','stale','stale'] },
+      { no: '第 5 集', title: '合同背后', st: ['ready','ready','ready','ready','ready','failed'] },
+      { no: '第 6 集', title: '深夜电话', st: ['ready','ready','ready','queued','not_started','not_started'] },
+      { no: '第 7 集', title: '医院走廊', st: ['ready','ready','ready','not_started','not_started','not_started'] },
+      { no: '第 8 集', title: '婚礼请柬', st: ['ready','ready','running','not_started','not_started','not_started'] },
+      { no: '第 9 集', title: '离开的理由', st: ['ready','ready','not_started','not_started','not_started','not_started'] },
+      { no: '第 10 集', title: '车站告别', st: ['ready','queued','not_started','not_started','not_started','not_started'] },
+      { no: '第 11 集', title: '雪落无声', st: ['ready','not_started','not_started','not_started','not_started','not_started'] },
+      { no: '第 12 集', title: '归来', st: ['not_started','not_started','not_started','not_started','not_started','not_started'] },
+      { no: '第 13 集', title: '新的线索', st: ['ready','ready','ready','not_started','not_started','not_started'] },
+      { no: '第 14 集', title: '短发', st: ['ready','ready','running','not_started','not_started','not_started'] },
+      { no: '第 15 集', title: '天台对峙', st: ['ready','ready','ready','not_started','not_started','not_started'] },
+      { no: '第 16 集', title: '风暴前夜', st: ['ready','ready','not_started','not_started','not_started','not_started'] },
+    ];
+  }
+
+  stageCell(status, idx) {
+    const names = ['事件','规划','剧本','资产','分镜','图片'];
+    const base = {
+      not_started: { bg:'#f3f5f7', fg:'#a0a6ad', border:'#f3f5f7', label:'未开始', tip:'依赖就绪后可生成', cursor:'default' },
+      queued:      { bg:'#eaf3fd', fg:'#2080f0', border:'#eaf3fd', label:'排队中', tip:'排队位置 #3', cursor:'pointer' },
+      running:     { bg:'#eaf3fd', fg:'#2080f0', border:'#eaf3fd', label:'生成中', tip:'点击展开任务详情，可取消', cursor:'pointer', spin:true },
+      ready:       { bg:'#e7f5ee', fg:'#18a058', border:'#e7f5ee', label:'就绪', tip:'点击跳转集工作区 · '+names[idx], cursor:'pointer' },
+      stale:       { bg:'#fdf3e3', fg:'#ad7a1e', border:'#f3e3bf', label:'已过期', tip:'已过期（上游剧本已修改）· 点击重新生成', cursor:'pointer', stale:true },
+      failed:      { bg:'#fbeef1', fg:'#d03050', border:'#f6d5dd', label:'失败', tip:'内容被审核拒绝，请修改描述/提示词后重试', cursor:'pointer' },
+    };
+    const c = base[status];
+    return { ...c, spin: !!c.spin, stale: !!c.stale };
+  }
+
+  renderVals() {
+    const sel = this.state.selected;
+    const bf = this.state.batchFilter;
+    const batchOf = i => (i < 12 ? 1 : 2); // 第 1–12 集为批次 1，13 集起为批次 2
+    const all = this.episodesData();
+    const data = bf ? all.filter((_, i) => batchOf(i) === bf) : all;
+    const episodes = data.map((e, i) => ({
+      no: e.no, title: e.title,
+      selected: !!sel[i],
+      rowBg: sel[i] ? '#f2faf5' : '#ffffff',
+      toggle: () => this.setState(s => ({ selected: { ...s.selected, [i]: !s.selected[i] } })),
+      stages: e.st.map((st, j) => this.stageCell(st, j)),
+    }));
+    const selectedCount = Object.values(sel).filter(Boolean).length;
+    const allSelected = selectedCount === data.length;
+    const sseOk = this.props.sseConnected ?? true;
+    const baseJobs = [
+      { name: '第 3 集 · 全部图片生成', meta: '12 / 18 · 2 失败', metaColor: '#d03050', active: true, pct: '66%', hasFailed: true },
+      { name: '第 8 集 · 剧本生成', meta: '进行中', metaColor: '#2080f0', active: true, pct: '40%', hasFailed: false },
+      { name: '第 2 集 · 分镜生成', meta: '已完成', metaColor: '#18a058', active: false, done: true, doneNote: '18 个镜头 · 5 分钟前' },
+    ];
+    const jobs = [...this.state.extraJobs, ...baseJobs];
+    const ctx = this.state.costCtx || { count: selectedCount || 1 };
+    const costImages = ctx.count * 6;
+    return {
+      batchFilter: !!bf,
+      batchFilterLabel: bf ? `批次 ${bf} · ${bf === 1 ? '第 1–12 集' : '第 13–26 集'}` : '',
+      clearBatchFilter: () => { location.hash = ''; this.setState({ batchFilter: null, selected: {} }); },
+      episodes, selectedCount, allSelected,
+      hasSelection: selectedCount > 0,
+      sseOk, sseDown: !sseOk,
+      activeJobCount: jobs.filter(j => j.active).length,
+      drawerOpen: this.state.drawerOpen,
+      jobs,
+      costModalOpen: this.state.costModalOpen,
+      costModalDesc: ctx.stale
+        ? '将重新生成本项目全部 12 项过期内容（含 4 张图片、2 组分镜）。'
+        : `将为选中的 ${ctx.count} 集生成全部参考图与首帧。`,
+      costImages: ctx.stale ? 4 : costImages,
+      toggleAll: () => this.setState(s => {
+        const all = Object.values(s.selected).filter(Boolean).length === data.length;
+        const next = {};
+        if (!all) data.forEach((_, i) => next[i] = true);
+        return { selected: next };
+      }),
+      clearSelection: () => this.setState({ selected: {} }),
+      toggleDrawer: () => this.setState(s => ({ drawerOpen: !s.drawerOpen })),
+      openCostModal: () => this.setState({ costModalOpen: true, costCtx: { count: selectedCount } }),
+      openStaleModal: () => this.setState({ costModalOpen: true, costCtx: { stale: true, count: 1 } }),
+      closeCostModal: () => this.setState({ costModalOpen: false }),
+      confirmCost: () => this.setState(s => ({
+        costModalOpen: false, selected: {}, drawerOpen: true,
+        extraJobs: [{
+          name: (s.costCtx && s.costCtx.stale) ? '过期内容 · 批量重新生成' : `${(s.costCtx || {}).count || 1} 集 · 全部图片生成`,
+          meta: '0 / ' + ((s.costCtx && s.costCtx.stale) ? 12 : ((s.costCtx || {}).count || 1) * 6) + ' · 排队中',
+          metaColor: '#2080f0', active: true, pct: '2%', hasFailed: false,
+        }, ...s.extraJobs],
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

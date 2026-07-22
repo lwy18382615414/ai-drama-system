@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;padding:0;background:#eef1f4;font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  a{color:#18a058;text-decoration:none;} a:hover{color:#36ad6a;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  *{box-sizing:border-box;}
+</style>
+<script src="./image-slot.js"></script>
+</helmet>
+<div style="min-height:100vh; color:#1f2225; display:flex; flex-direction:column;">
+  <!-- 顶栏 -->
+  <header style="height:56px; background:#fff; border-bottom:1px solid #e4e7eb; display:flex; align-items:center; gap:16px; padding:0 20px; flex-shrink:0;">
+    <a href="资产库.dc.html" style="font-size:13px; color:#8a9099;">返回</a>
+    <div style="font-size:13px; color:#8a9099;">晚风照进山海 / <a href="资产库.dc.html" style="color:#8a9099;">资产库</a> / <span style="color:#1f2225; font-weight:600;">老宅堂屋</span></div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:14px;">
+      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#18a058;"><span style="width:7px; height:7px; border-radius:50%; background:#18a058;"></span>实时已连接</div>
+      <div style="display:flex; align-items:center; gap:8px; border:1px solid #e0e3e7; background:#fff; border-radius:16px; padding:5px 12px 5px 8px; font-size:12px;">
+        <span style="width:16px; height:16px; border-radius:50%; border:2px solid #d6ecdf; border-top-color:#18a058; animation:spin 1s linear infinite; display:inline-block;"></span>
+        2 个进行中
+      </div>
+    </div>
+  </header>
+
+  <div style="flex:1; padding:24px 26px 56px;">
+    <!-- 场景头部 -->
+    <div style="display:flex; align-items:center; gap:16px;">
+      <div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <h1 style="margin:0; font-size:20px; font-weight:600;">老宅堂屋</h1>
+          <span style="font-size:11px; background:#e7f5ee; color:#18a058; border-radius:4px; padding:2px 8px;">场景</span>
+          <span style="font-size:11px; background:#f1f3f5; color:#5b6169; border-radius:4px; padding:2px 8px;">3 个变体</span>
+        </div>
+        <div style="font-size:13px; color:#8a9099; margin-top:5px;">出现于 6 集 · 关联 14 个镜头 · 最近由第 4 集剧本自动更新</div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:10px;">
+        <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 14px; cursor:pointer;" style-hover="border-color:#8a9099;">编辑描述</button>
+        <button onClick="{{ openConfirm }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">重新生成受影响内容</button>
+      </div>
+    </div>
+
+    <!-- stale 提示 -->
+    <div style="margin-top:18px; display:flex; align-items:center; gap:10px; background:#fdf6e9; border:1px solid #f3e3bf; border-radius:10px; padding:10px 14px;">
+      <span style="width:8px; height:8px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>
+      <span style="font-size:13px; color:#7a5a14;">场景描述于今天 12:40 修改，<b>夜变体参考图与第 4 集 3 张首帧</b>已标记过期</span>
+    </div>
+
+    <div style="margin-top:22px; display:flex; gap:22px; align-items:flex-start;">
+      <!-- 左列：变体 -->
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:16px;">
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:20px 22px;">
+          <div style="display:flex; align-items:center; margin-bottom:14px;">
+            <div style="font-size:14px; font-weight:600;">时段 / 氛围变体</div>
+            <button style="margin-left:auto; border:1px solid #e0e3e7; background:#fff; color:#18a058; font-size:12px; border-radius:6px; padding:5px 12px; cursor:pointer;" style-hover="border-color:#18a058;">+ 新增变体</button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+            <sc-for list="{{ variants }}" as="v" hint-placeholder-count="3">
+              <div style="position:relative; border:1px solid {{ v.border }}; border-radius:10px; overflow:hidden;">
+                <div style="height:170px;">
+                  <image-slot id="{{ v.slotId }}" shape="rect" placeholder="{{ v.ph }}"></image-slot>
+                </div>
+                <sc-if value="{{ v.stale }}" hint-placeholder-val="{{ false }}">
+                  <span title="已过期（场景描述已修改）" style="position:absolute; top:8px; right:8px; font-size:11px; background:#fdf3e3; color:#ad7a1e; border:1px solid #f3e3bf; border-radius:4px; padding:1px 7px;">已过期</span>
+                </sc-if>
+                <div style="padding:12px 14px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:13px; font-weight:600;">{{ v.name }}</span>
+                    <span style="font-size:12px; color:#a0a6ad; margin-left:auto;">{{ v.usage }}</span>
+                  </div>
+                  <div style="font-size:12px; color:#8a9099; margin-top:4px; line-height:1.7;">{{ v.desc }}</div>
+                  <div style="margin-top:10px; display:flex; gap:8px;">
+                    <button style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:12px; border-radius:5px; padding:4px 12px; cursor:pointer;" style-hover="border-color:#18a058; color:#18a058;">{{ v.action }}</button>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <!-- 关联镜头 -->
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:20px 22px;">
+          <div style="font-size:14px; font-weight:600; margin-bottom:12px;">关联镜头</div>
+          <div style="display:flex; flex-direction:column;">
+            <sc-for list="{{ shots }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #f2f4f6;">
+                <span style="font-size:12px; color:#8a9099; width:64px; flex-shrink:0;">{{ s.ep }}</span>
+                <span style="font-size:13px; font-weight:600; width:72px; flex-shrink:0;">{{ s.no }}</span>
+                <span style="font-size:12px; color:#5b6169; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ s.desc }}</span>
+                <span style="font-size:11px; border-radius:4px; padding:1px 8px; background:{{ s.bg }}; color:{{ s.fg }}; flex-shrink:0;">{{ s.status }}</span>
+                <a href="集工作区 v2.dc.html" style="font-size:12px; flex-shrink:0;">打开</a>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右列 -->
+      <div style="width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:16px;">
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:18px 20px;">
+          <div style="font-size:14px; font-weight:600;">场景描述</div>
+          <div style="margin-top:10px; font-size:13px; line-height:1.9; color:#2b2f33;">南方老宅的堂屋，八仙桌居中，条案上有旧座钟与相框。木窗棂，青砖地。整体色调偏暖褐，年代感强。</div>
+          <div style="margin-top:10px; font-size:12px; color:#a0a6ad;">修改于今天 12:40</div>
+        </div>
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:18px 20px;">
+          <div style="font-size:14px; font-weight:600;">受影响内容</div>
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px; font-size:13px; color:#5b6169;">
+            <div style="display:flex; align-items:center; gap:8px;"><span style="width:7px; height:7px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>夜变体参考图已过期<a href="#" style="margin-left:auto; font-size:12px;">重新生成</a></div>
+            <div style="display:flex; align-items:center; gap:8px;"><span style="width:7px; height:7px; border-radius:50%; background:#f0a020; flex-shrink:0;"></span>首帧 3 张已过期（第 4 集）<a href="#" style="margin-left:auto; font-size:12px;">重新生成</a></div>
+          </div>
+          <button onClick="{{ openConfirm }}" style="margin-top:14px; width:100%; border:none; background:#f0a020; color:#fff; font-size:12px; border-radius:6px; padding:7px 0; cursor:pointer;" style-hover="background:#fcb040;">全部重新生成</button>
+        </div>
+        <div style="background:#fff; border:1px solid #e4e7eb; border-radius:12px; padding:18px 20px;">
+          <div style="font-size:14px; font-weight:600;">出现的集</div>
+          <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
+            <sc-for list="{{ epChips }}" as="c" hint-placeholder-count="6">
+              <a href="集工作区 v2.dc.html" style="font-size:12px; border:1px solid #e4e7eb; border-radius:12px; padding:3px 11px; color:#5b6169; background:#fafbfc;" style-hover="border-color:#18a058; color:#18a058;">{{ c }}</a>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量操作确认框 -->
+  <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(15,18,20,.32); z-index:60; display:flex; align-items:center; justify-content:center;">
+      <div style="width:400px; background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 16px 48px rgba(0,0,0,.2);">
+        <div style="font-size:16px; font-weight:600;">批量操作确认</div>
+        <div style="margin-top:10px; font-size:13px; color:#5b6169; line-height:1.7;">将重新生成该场景全部受影响内容（1 张变体参考图 + 3 张首帧）。</div>
+        <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:10px;">
+          <button onClick="{{ closeConfirm }}" style="border:1px solid #e0e3e7; background:#fff; color:#5b6169; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="border-color:#8a9099;">取消</button>
+          <button onClick="{{ closeConfirm }}" style="border:none; background:#18a058; color:#fff; font-size:13px; border-radius:6px; padding:7px 16px; cursor:pointer;" style-hover="background:#36ad6a;">确认并创建 Job</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { confirmOpen: false };
+  renderVals() {
+    return {
+      confirmOpen: this.state.confirmOpen,
+      openConfirm: () => this.setState({ confirmOpen: true }),
+      closeConfirm: () => this.setState({ confirmOpen: false }),
+      variants: [
+        { name: '夜 · 暖光', slotId: 'tangwu-night', ph: '夜景参考图', usage: '9 个镜头', desc: '台灯暖光为主，窗外偶有雨夜冷光对比。', stale: true, border: '#f3e3bf', action: '重新生成' },
+        { name: '日 · 自然光', slotId: 'tangwu-day', ph: '日景参考图', usage: '4 个镜头', desc: '晨光从木窗斜入，尘埃颗粒感。', stale: false, border: '#e4e7eb', action: '重新生成' },
+        { name: '回忆 · 泛黄', slotId: 'tangwu-memory', ph: '回忆调色参考图', usage: '1 个镜头', desc: '整体泛黄怀旧调，用于母亲回忆片段。', stale: false, border: '#e4e7eb', action: '重新生成' },
+      ],
+      shots: [
+        { ep: '第 1 集', no: '镜头 03', desc: '林晚初回老宅，环视堂屋', status: '就绪', bg: '#e7f5ee', fg: '#18a058' },
+        { ep: '第 4 集', no: '镜头 01', desc: '林晚坐在八仙桌前读信', status: '已过期', bg: '#fdf3e3', fg: '#ad7a1e' },
+        { ep: '第 4 集', no: '镜头 02', desc: '信纸特写，暖光', status: '已过期', bg: '#fdf3e3', fg: '#ad7a1e' },
+        { ep: '第 4 集', no: '镜头 04', desc: '林晚攥紧信纸，眼眶泛红', status: '已过期', bg: '#fdf3e3', fg: '#ad7a1e' },
+        { ep: '第 6 集', no: '镜头 05', desc: '陈叔到访，两人对坐', status: '就绪', bg: '#e7f5ee', fg: '#18a058' },
+      ],
+      epChips: ['第 1 集','第 3 集','第 4 集','第 6 集','第 8 集','第 12 集'],
+    };
+  }
+}
+</script>
+</body>
+</html>
