@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createDatabase,
   episodes,
+  generationJobs,
   generationTasks,
   initializeDatabase,
   projects,
@@ -16,6 +17,7 @@ import { createImageGenerationRoutes } from './image-generation.js'
 
 interface EnqueueBody {
   episodeId: string
+  jobId: string | null
   total: number
   queued: string[]
   skipped: string[]
@@ -139,12 +141,16 @@ describe('POST /api/episodes/:episodeId/generate-storyboard-first-frames (async 
 
     expect(body.total).toBe(3)
     expect(body.queued).toHaveLength(2)
+    expect(body.jobId).toBeTruthy()
     expect(body.skipped).toEqual(['storyboard-2'])
 
     const tasks = await pendingImageTasks(db)
     expect(tasks).toHaveLength(2)
     expect(tasks.every((t) => t.status === 'pending')).toBe(true)
     expect(tasks.map((t) => t.targetId).sort()).toEqual(['storyboard-1', 'storyboard-3'])
+    expect(tasks.every((task) => task.jobId === body.jobId)).toBe(true)
+    const [job] = await db.select().from(generationJobs).where(eq(generationJobs.id, body.jobId!))
+    expect(job).toMatchObject({ totalCount: 2, pendingCount: 2, skippedCount: 1, status: 'pending' })
     // The worker is handed the freshly queued tasks.
     expect(scheduler.announced.sort()).toEqual([...body.queued].sort())
     expect(scheduler.notified).toBe(1)

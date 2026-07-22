@@ -22,7 +22,9 @@ import { createProjectRoutes } from './routes/project.js'
 import { createScriptRoutes } from './routes/script.js'
 import { createStoryboardRoutes } from './routes/storyboard.js'
 import { createImageGenerationRoutes } from './routes/image-generation.js'
+import { createAppearanceVersionRoutes } from './routes/appearance-versions.js'
 import { createTaskStreamRoutes } from './routes/task-stream.js'
+import { createEpisodePipelineRoutes } from './routes/episode-pipeline.js'
 
 export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
@@ -63,7 +65,9 @@ export async function createApp() {
   app.route('/', createAssetRoutes({ db, provider, scheduler: worker }))
   app.route('/', createStoryboardRoutes({ db, provider, scheduler: worker }))
   app.route('/', createImageGenerationRoutes({ db, imageProvider, scheduler: worker }))
+  app.route('/', createAppearanceVersionRoutes({ db, imageProvider, scheduler: worker }))
   app.route('/', createTaskStreamRoutes({ db, bus: worker }))
+  app.route('/', createEpisodePipelineRoutes({ db }))
 
   return { app, db, worker }
 }

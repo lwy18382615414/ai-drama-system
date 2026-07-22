@@ -43,8 +43,8 @@ id: <TaskEvent.updatedAt>
 data: TaskEvent
 ```
 
-一个任务的生命周期通常是 `running` → `completed`(或 `failed`;失败重试时会再次出现
-`pending` → `running`)。
+一个任务的生命周期通常是 `running` → `completed`(或 `failed`)；可重试失败先进入
+`retry_wait`，到达持久化退避时间后再次出现 `pending` → `running`；取消的任务进入 `cancelled`。
 
 ### `ping` —— 空闲保活(约每 15 秒)
 
@@ -65,7 +65,7 @@ data:
 | `taskId` | string | 任务 ID(`generation_tasks.id`) |
 | `projectId` | string | 所属项目 |
 | `taskType` | string | `event_extraction` / `episode_planning` / `script_generation` / `asset_extraction` / `storyboard_generation` / `project_profile` / `image_generation` |
-| `status` | string | `pending` / `running` / `completed` / `failed` |
+| `status` | string | `pending` / `running` / `retry_wait` / `completed` / `failed` / `cancelled` |
 | `targetType` | string \| null | 生成目标类型(如图像任务的 character / scene / storyboard) |
 | `targetId` | string \| null | 目标资源 ID |
 | `episodeId` | string \| null | 关联分集(若有) |
@@ -114,3 +114,9 @@ function subscribeProjectTasks(projectId: string, onChange: (tasks: TaskEvent[])
   runner 管终态写入」的边界。见 `packages/tasks/task-worker.ts`、`apps/server/routes/task-stream.ts`。
 - 事件总线是**进程内**的,适用于当前单进程 MVP。多实例部署时需替换为 Redis Pub/Sub(或 libSQL →
   Postgres 后用 `LISTEN/NOTIFY`),与 `TaskScheduler` 预留 BullMQ 是同一条演进线。
+
+## 重构演进边界
+
+当前事件字段和状态以已实现代码为准。`docs/backend-refactor-plan.md` 规划的 `retry_wait`、`cancelled`、租约/心跳、Job 进度与跨进程事件尚未进入当前 SSE 契约；实施时需要同时更新 `TaskEvent`、snapshot 查询、本文和前端消费逻辑。
+
+未来客户端以数据库派生状态为最终真相：重连仍先获取 snapshot，Job 进度由已持久化的子任务聚合而来，不依赖仅存在于内存的计数。多实例化后才将进程内总线替换为跨进程通道。

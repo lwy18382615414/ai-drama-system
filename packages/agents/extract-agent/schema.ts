@@ -93,6 +93,12 @@ export const ExtractAgentInputSchema = z.object({
   options: ExtractAgentOptionsSchema.optional(),
 })
 
+export const AppearanceChangeSchema = z.object({
+  // Full standalone appearance description (unchanged traits merged in), not a diff.
+  new_appearance: z.string().min(1),
+  reason: NullableStringSchema,
+})
+
 export const ExtractedCharacterSchema = z.object({
   name: z.string().min(1),
   alias_json: z.array(z.string()).default([]),
@@ -106,6 +112,9 @@ export const ExtractedCharacterSchema = z.object({
   reference_image_url: NullableStringSchema,
   voice_id: NullableStringSchema,
   usage_type: z.string().min(1).default('mentioned'),
+  // Only for characters that already exist in the project: a persistent appearance
+  // change introduced by this episode. Omitted when nothing changed.
+  appearance_change: AppearanceChangeSchema.nullable().optional(),
 })
 
 export const ExtractedSceneSchema = z.object({
@@ -143,6 +152,15 @@ export const ExtractAgentSuccessResultSchema = z.object({
     sceneIds: z.array(z.string()),
     propIds: z.array(z.string()),
   }),
+  appearanceVersions: z
+    .array(
+      z.object({
+        versionId: z.string(),
+        characterId: z.string(),
+        action: z.enum(['created', 'updated', 'unchanged']),
+      }),
+    )
+    .default([]),
 })
 
 export const ExtractAgentFailureResultSchema = z.object({

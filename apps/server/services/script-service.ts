@@ -18,6 +18,7 @@ import {
 } from '../../../packages/agents/script-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
+import { invalidateAfterScriptChange } from './episode-pipeline-service.js'
 
 export const StartScriptGenerationRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -156,6 +157,7 @@ export async function updateScript(db: DatabaseClient, scriptId: string, request
   }
 
   await db.update(scripts).set(updates).where(eq(scripts.id, scriptId))
+  await invalidateAfterScriptChange(db, existing.episodeId)
 
   const [script] = await db.select().from(scripts).where(eq(scripts.id, scriptId)).limit(1)
   return script

@@ -349,7 +349,7 @@ Purpose:
 Notes:
 
 - Supports `force` through request body or query string where implemented by the service route.
-- Generated `image_prompt` and `video_prompt` values are persisted storyboard planning fields only while Phase 2 is paused.
+- Generated `image_prompt` and `video_prompt` values are persisted storyboard planning fields. `image_prompt` is an input to the active Phase 2C first-frame image workflow; `video_prompt` remains planning-only while later media work is paused.
 
 ### `GET /api/episodes/:episodeId/storyboards`
 
@@ -421,9 +421,25 @@ Each batch route resolves all episode-linked targets, skips targets that already
 
 Returns episode-level image progress counts per target type. `404` if the episode is not found.
 
+#### `GET /api/episodes/:episodeId/pipeline-status`
+
+Returns the derived production state for `events_ready`, `planning_ready`, `script_ready`, `assets_ready`, `storyboards_ready`, and `images_ready`, each as `not_started`, `queued`, `running`, `ready`, `stale`, or `failed`. It also returns the active per-episode revisions. This query is a read model; it does not persist redundant display state on `episodes`.
+
 #### `GET /api/generation-tasks/:taskId`
 
 Fetches a generation task by ID for polling.
+
+#### `POST /api/generation-tasks/:taskId/cancel`
+
+Requests cooperative cancellation. A `pending` or `retry_wait` task becomes `cancelled` immediately. A `running` task stores `cancel_requested_at`; the Worker marks it `cancelled` once its handler returns and never retries it. A Provider without remote cancellation can still finish its active remote call before that point.
+
+#### `GET /api/generation-jobs/:jobId`
+
+Fetches a persisted batch Job and its aggregate `pending`/`running`/`succeeded`/`failed`/`skipped` counts and progress percentage.
+
+#### `POST /api/generation-jobs/:jobId/cancel`
+
+Requests cancellation for a batch Job. Pending and retry-waiting children are cancelled immediately; running children receive a cooperative cancellation request and settle through the Worker.
 
 #### `GET /api/projects/:projectId/assets`
 
@@ -451,10 +467,19 @@ Events are emitted by the in-process `TaskWorker` (which implements `TaskEventBu
 
 Do not add routes for the following unless the user explicitly requests expanding Phase 2 beyond Phase 2C:
 
-- real image provider integration
 - video generation
 - TTS generation
 - subtitle generation
 - FFmpeg composition
 - final episode video export
 - bulk media job orchestration
+
+## Planned Task and Job API Evolution
+
+The routes above are the current contract. The following are planned only after the corresponding task/revision implementation in `docs/backend-refactor-plan.md`; they must not be exposed prematurely:
+
+- job-level read/cancel/retry endpoints for `generation_jobs` and their child tasks;
+- revision/staleness and pipeline-status read models, including `computeEpisodePipelineStatus(episodeId)`;
+- re-planning impact-preview and explicit active-revision switching.
+
+Future batch APIs should return a Job reference and report persisted aggregate progress. They must use revision-aware idempotency, cost estimation/confirmation where appropriate, and dependency validation instead of synchronously fanning out unbounded work in an HTTP request.

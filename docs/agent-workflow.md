@@ -57,6 +57,14 @@ log agent run
 ↓
 update task status
 
+## Next-Phase Task Contract
+
+The next refactor preserves the existing Agent modules and strengthens the execution contract (see `docs/backend-refactor-plan.md`): Agent/Handler code returns standardized success or classified failure; it does not choose infrastructure retries. The Worker owns task lease, heartbeat, timeout recovery, cancellation checks, retry delay and maximum attempts. On success, an Agent Runner writes business rows and the task `completed` terminal state in one transaction.
+
+Zod failures receive at most one structured repair attempt. The raw output is retained securely, concise Zod paths/errors are returned to the model, and the repaired JSON is validated again. `repair_count` is separate from task `retry_count`.
+
+Every context and output must be tied to the relevant upstream revision. A stale or superseded task may not write over the active revision. Services validate required upstream artifacts before enqueuing downstream work.
+
 ## Agent Rules
 
 Each Agent must have:
@@ -296,7 +304,7 @@ Routes:
 Boundary note:
 
 - `image_prompt` and `video_prompt` are persisted as storyboard planning fields.
-- Their presence must not trigger image/video provider calls while Phase 2 is paused.
+- `image_prompt` is consumed by the active Phase 2C storyboard first-frame image workflow; `video_prompt` must not trigger a video-provider call while later media work is paused.
 
 ## Phase 2A–2C Image Task Infrastructure
 

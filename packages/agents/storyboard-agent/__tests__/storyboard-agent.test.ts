@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { createDatabase, initializeDatabase, type DatabaseClient } from '../../../database/index.js'
 import {
   agentRuns,
+  characterAppearanceVersions,
   characters,
   episodeCharacterLinks,
   episodePropLinks,
@@ -400,6 +401,35 @@ describe('StoryboardAgent', () => {
     expect(task.status).toBe('completed')
     expect(task.taskType).toBe('storyboard_generation')
     expect(task.episodeId).toBe('episode-1')
+  })
+
+  it('feeds the appearance version in effect for the episode to the agent', async () => {
+    const db = await createTestDb()
+    const input = await seedStoryboardContext(db)
+    const now = new Date().toISOString()
+    await db.insert(characterAppearanceVersions).values({
+      id: 'version-1',
+      characterId: 'character-linwan',
+      sourceEpisodeId: 'episode-1',
+      effectiveFromEpisodeNo: null,
+      appearance: '黑色礼服，左脸有一道疤痕。',
+      referenceImageUrl: null,
+      changeReason: '受伤',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    let userPrompt = ''
+    const provider = new MockStructuredTextProvider((request) => {
+      userPrompt = request.userPrompt
+      return createProviderOutput()
+    })
+
+    const result = await runStoryboardAgent({ db, provider, input })
+
+    expect(result.success).toBe(true)
+    expect(userPrompt).toContain('左脸有一道疤痕')
+    expect(userPrompt).not.toContain('神情克制')
   })
 
   it('does not overwrite existing storyboards unless force is true', async () => {

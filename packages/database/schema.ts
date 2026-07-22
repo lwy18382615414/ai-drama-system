@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const projects = sqliteTable('projects', {
@@ -160,6 +161,36 @@ export const characters = sqliteTable(
   }),
 )
 
+export const characterAppearanceVersions = sqliteTable(
+  'character_appearance_versions',
+  {
+    id: text('id').primaryKey(),
+    characterId: text('character_id')
+      .notNull()
+      .references(() => characters.id, { onDelete: 'cascade' }),
+    // Auto-detected versions: the extracting episode; effective episode number is
+    // resolved at query time by joining episodes so batch re-plan renumbering is followed.
+    sourceEpisodeId: text('source_episode_id').references(() => episodes.id, { onDelete: 'cascade' }),
+    // Manual versions only: explicit effective episode number. XOR with sourceEpisodeId,
+    // enforced at the service layer.
+    effectiveFromEpisodeNo: integer('effective_from_episode_no'),
+    appearance: text('appearance').notNull(),
+    referenceImageUrl: text('reference_image_url'),
+    changeReason: text('change_reason'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    characterSourceEpisodeUnique: uniqueIndex('cav_character_source_episode_unique')
+      .on(table.characterId, table.sourceEpisodeId)
+      .where(sql`source_episode_id IS NOT NULL`),
+    characterEffectiveFromUnique: uniqueIndex('cav_character_effective_from_unique')
+      .on(table.characterId, table.effectiveFromEpisodeNo)
+      .where(sql`effective_from_episode_no IS NOT NULL`),
+    characterIdIdx: index('cav_character_id_idx').on(table.characterId),
+  }),
+)
+
 export const scenes = sqliteTable(
   'scenes',
   {
@@ -316,10 +347,67 @@ export const generationTasks = sqliteTable('generation_tasks', {
   outputJson: text('output_json'),
   status: text('status').notNull(),
   retryCount: integer('retry_count').notNull().default(0),
+  /** Parent record for a user-initiated batch; null for a standalone task. */
+  jobId: text('job_id'),
+  /** Revision of the upstream data this task is allowed to consume/write. */
+  upstreamRevision: text('upstream_revision').notNull().default('0'),
+  /** Stable key used by services to reuse an active/effective request. */
+  idempotencyKey: text('idempotency_key'),
+  lockedBy: text('locked_by'),
+  lockedAt: text('locked_at'),
+  heartbeatAt: text('heartbeat_at'),
+  leaseExpiresAt: text('lease_expires_at'),
+  nextRetryAt: text('next_retry_at'),
+  timeoutSeconds: integer('timeout_seconds'),
+  cancelRequestedAt: text('cancel_requested_at'),
+  errorCode: text('error_code'),
+  errorDetailsJson: text('error_details_json'),
+  repairCount: integer('repair_count').notNull().default(0),
   errorMessage: text('error_message'),
   startedAt: text('started_at'),
   completedAt: text('completed_at'),
   createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => ({
+  claimIdx: index('generation_tasks_claim_idx').on(table.status, table.nextRetryAt, table.createdAt),
+  leaseIdx: index('generation_tasks_lease_idx').on(table.status, table.leaseExpiresAt),
+  idempotencyIdx: index('generation_tasks_idempotency_idx').on(table.idempotencyKey),
+  jobIdx: index('generation_tasks_job_idx').on(table.jobId),
+}))
+
+/** Persisted aggregate for an asynchronous batch operation. */
+export const generationJobs = sqliteTable('generation_jobs', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id),
+  episodeId: text('episode_id'),
+  jobType: text('job_type').notNull(),
+  status: text('status').notNull().default('pending'),
+  totalCount: integer('total_count').notNull().default(0),
+  pendingCount: integer('pending_count').notNull().default(0),
+  runningCount: integer('running_count').notNull().default(0),
+  succeededCount: integer('succeeded_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  skippedCount: integer('skipped_count').notNull().default(0),
+  progressPercent: integer('progress_percent').notNull().default(0),
+  estimatedCost: text('estimated_cost'),
+  cancelRequestedAt: text('cancel_requested_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => ({
+  projectCreatedIdx: index('generation_jobs_project_created_idx').on(table.projectId, table.createdAt),
+}))
+
+/** Active production revisions and invalidation facts for one episode. */
+export const episodePipelineStates = sqliteTable('episode_pipeline_states', {
+  episodeId: text('episode_id').primaryKey().references(() => episodes.id, { onDelete: 'cascade' }),
+  planningRevision: integer('planning_revision').notNull().default(1),
+  scriptRevision: integer('script_revision').notNull().default(0),
+  assetRevision: integer('asset_revision').notNull().default(0),
+  storyboardRevision: integer('storyboard_revision').notNull().default(0),
+  imageRevision: integer('image_revision').notNull().default(0),
+  assetsStale: integer('assets_stale', { mode: 'boolean' }).notNull().default(false),
+  storyboardsStale: integer('storyboards_stale', { mode: 'boolean' }).notNull().default(false),
+  imagesStale: integer('images_stale', { mode: 'boolean' }).notNull().default(false),
   updatedAt: text('updated_at').notNull(),
 })
 
@@ -349,6 +437,7 @@ export const schema = {
   novelEvents,
   episodeEventLinks,
   characters,
+  characterAppearanceVersions,
   scenes,
   props,
   episodeCharacterLinks,
@@ -357,6 +446,8 @@ export const schema = {
   storyboards,
   agentRuns,
   generationTasks,
+  generationJobs,
+  episodePipelineStates,
   assets,
 }
 
@@ -368,6 +459,7 @@ export type NovelChapter = typeof novelChapters.$inferSelect
 export type NovelEvent = typeof novelEvents.$inferSelect
 export type EpisodeEventLink = typeof episodeEventLinks.$inferSelect
 export type Character = typeof characters.$inferSelect
+export type CharacterAppearanceVersion = typeof characterAppearanceVersions.$inferSelect
 export type Scene = typeof scenes.$inferSelect
 export type Prop = typeof props.$inferSelect
 export type EpisodeCharacterLink = typeof episodeCharacterLinks.$inferSelect
@@ -376,4 +468,6 @@ export type EpisodePropLink = typeof episodePropLinks.$inferSelect
 export type Storyboard = typeof storyboards.$inferSelect
 export type AgentRun = typeof agentRuns.$inferSelect
 export type GenerationTask = typeof generationTasks.$inferSelect
+export type GenerationJob = typeof generationJobs.$inferSelect
+export type EpisodePipelineState = typeof episodePipelineStates.$inferSelect
 export type Asset = typeof assets.$inferSelect

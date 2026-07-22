@@ -29,6 +29,7 @@ export async function createDatabase(filename = 'data/ai-drama.sqlite') {
   // libSQL enables foreign keys per connection; WAL gives durable, concurrent-read local files.
   await db.run(sql`PRAGMA foreign_keys = ON`)
   await db.run(sql`PRAGMA journal_mode = WAL`)
+  await db.run(sql`PRAGMA busy_timeout = 5000`)
 
   if (resolved.ephemeralDir) {
     ephemeralDirs.set(db, resolved.ephemeralDir)

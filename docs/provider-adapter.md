@@ -68,3 +68,9 @@ When `referenceImages` are present, the provider resolves each to a base64 data 
 ## Boundary
 
 Video, TTS, subtitle, FFmpeg, and final-export providers remain out of scope until Phase 2 is explicitly expanded beyond Phase 2C.
+
+## Planned Provider Reliability Contract
+
+The next refactor will extend adapters with a capability description (`structuredOutput`, `imageInput`, optional context/image-size limits) and centralized timeout, normalized failure classification, bounded exponential backoff, provider request-ID capture, token/image usage, cost estimation and moderation-result normalization. Adapters must also validate temporary-resource downloads against allowed protocol/domain, size, MIME type and timeout.
+
+For structured text, a Zod validation failure may trigger one feedback-based JSON repair attempt; this repair is separate from task retries. Provider request IDs are audit data only: OpenAI-compatible proxies cannot generally be queried later for a completed request, so recovery depends on task idempotency, revision isolation and re-entrant asset persistence. The current fail-fast requirement for text and image provider configuration remains unchanged.

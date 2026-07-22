@@ -1,27 +1,42 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod/v4'
-import type { DatabaseClient } from '../../../packages/database/index.js'
+import type {
+  AppearanceVersionWithEffectiveNo,
+  CharacterAppearanceVersion,
+  DatabaseClient,
+} from '../../../packages/database/index.js'
 import {
   assets,
+  characterAppearanceVersions,
   characters,
   episodeCharacterLinks,
+  episodePipelineStates,
   episodeSceneLinks,
   episodes,
   generationTasks,
+  listCharacterAppearanceVersions,
   projects,
   props,
+  resolveCharacterAppearances,
   scenes,
   storyboards,
 } from '../../../packages/database/index.js'
 import type { ImageGenerationRequest, ImageProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
+import { createGenerationJob } from './generation-job-service.js'
 
 export const ImageTargetTypeSchema = z.enum([
   'character_reference_image',
+  'character_appearance_version',
   'scene_reference_image',
   'storyboard_first_frame',
 ])
+
+// Appended to appearance-version prompts whenever a reference image conditions the
+// generation, so the model changes the look without drifting the identity.
+const FACE_CONSISTENCY_INSTRUCTION =
+  'Keep the exact same face, identity and body type as the reference image; apply only the appearance described above.'
 
 export const ImageGenerationOptionsSchema = z
   .object({
@@ -142,6 +157,13 @@ interface ResolvedImageTarget {
   storyboardId?: string | null
   /** Reference images (shot targets only) that condition generation for consistency. */
   referenceImages?: string[]
+  /**
+   * character_appearance_version only: the chain has no anchor image yet, so the character's base
+   * reference must be generated first. `baseImageSpec` carries the prompt/target to do so, letting
+   * {@link startImageGeneration} back-fill the base inline before enqueuing the version task.
+   */
+  needsBaseImage?: boolean
+  baseImageSpec?: { characterId: string; prompt: string }
 }
 
 export async function startCharacterReferenceImageGeneration(
@@ -162,6 +184,32 @@ export async function startCharacterReferenceImageGeneration(
   return startImageGeneration(deps, character.projectId, {
     target_type: 'character_reference_image',
     target_id: characterId,
+    force: request.force,
+    options: request.options,
+  })
+}
+
+export async function startAppearanceVersionImageGeneration(
+  deps: ImageGenerationServiceDeps,
+  versionId: string,
+  request: StartCharacterReferenceImageRequest,
+) {
+  const [row] = await deps.db
+    .select({ projectId: characters.projectId })
+    .from(characterAppearanceVersions)
+    .innerJoin(characters, eq(characterAppearanceVersions.characterId, characters.id))
+    .where(eq(characterAppearanceVersions.id, versionId))
+    .limit(1)
+
+  if (!row) {
+    throw new ImageGenerationServiceError(`Appearance version not found: ${versionId}`, 404)
+  }
+
+  // The base-image back-fill (when the chain has no anchor image yet) is handled generically
+  // inside startImageGeneration, so this stays a thin wrapper like the other start* helpers.
+  return startImageGeneration(deps, row.projectId, {
+    target_type: 'character_appearance_version',
+    target_id: versionId,
     force: request.force,
     options: request.options,
   })
@@ -224,7 +272,7 @@ export async function startImageGeneration(
     throw new ImageGenerationServiceError(`Project not found: ${projectId}`, 404)
   }
 
-  const target = await resolveImageTarget(deps.db, projectId, request)
+  let target = await resolveImageTarget(deps.db, projectId, request)
 
   if (request.force !== true) {
     if (target.existingUrl) {
@@ -257,6 +305,27 @@ export async function startImageGeneration(
     }
   }
 
+  // An appearance version is conditioned on the previous look; when the whole chain (and the
+  // character base) has no image yet, generate the base inline first so the reference exists,
+  // then re-resolve so the version task carries the freshly generated base as its reference.
+  if (target.targetType === 'character_appearance_version' && target.needsBaseImage && target.baseImageSpec) {
+    const baseResult = await generateOneTarget(deps, {
+      projectId,
+      targetType: 'character_reference_image',
+      targetId: target.baseImageSpec.characterId,
+      prompt: target.baseImageSpec.prompt,
+      existingUrl: null,
+      force: false,
+    })
+    if (baseResult.status !== 'completed' || !baseResult.imageUrl) {
+      throw new ImageGenerationServiceError(
+        `Base reference image generation failed for character ${target.baseImageSpec.characterId}: ${baseResult.error ?? 'unknown'}`,
+        502,
+      )
+    }
+    target = await resolveImageTarget(deps.db, projectId, request)
+  }
+
   // Guarantee the shot's character/scene reference images exist before enqueuing the
   // frame task, then refresh the reference list so the pending task carries them. Runs
   // synchronously (inline) here — the "ensure before enqueue" ordering that keeps the
@@ -269,9 +338,11 @@ export async function startImageGeneration(
       .where(eq(storyboards.id, target.storyboardId))
       .limit(1)
     if (storyboard) {
-      await ensureShotReferenceImages(deps, projectId, [storyboard])
+      const episodeNo = await getEpisodeNo(deps.db, storyboard.episodeId)
+      await ensureShotReferenceImages(deps, projectId, episodeNo, [storyboard])
       if (request.prompt_override === undefined) {
-        referenceImages = (await composeStoryboardFirstFramePrompt(deps.db, projectId, storyboard)).referenceImages
+        referenceImages = (await composeStoryboardFirstFramePrompt(deps.db, projectId, episodeNo, storyboard))
+          .referenceImages
       }
     }
   }
@@ -306,6 +377,7 @@ async function insertPendingImageTask(
     episodeId?: string | null
     storyboardId?: string | null
     referenceImages?: string[]
+    jobId?: string | null
     // Batch paths execute inline right after inserting, so they seed the row as 'running' to
     // keep the worker (which only claims 'pending') from racing them. The single async path
     // leaves it 'pending' for the worker to claim.
@@ -342,6 +414,7 @@ async function insertPendingImageTask(
     outputJson: null,
     status,
     retryCount: 0,
+    jobId: params.jobId ?? null,
     errorMessage: null,
     startedAt: null,
     completedAt: null,
@@ -455,12 +528,23 @@ async function generateOneTarget(
 
 async function resolveEpisode(db: DatabaseClient, episodeId: string) {
   const [episode] = await db
-    .select({ id: episodes.id, projectId: episodes.projectId })
+    .select({ id: episodes.id, projectId: episodes.projectId, episodeNo: episodes.episodeNo })
     .from(episodes)
     .where(eq(episodes.id, episodeId))
     .limit(1)
 
   return episode ?? null
+}
+
+async function getEpisodeNo(db: DatabaseClient, episodeId: string): Promise<number> {
+  const [episode] = await db
+    .select({ episodeNo: episodes.episodeNo })
+    .from(episodes)
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+
+  // A missing episode row means broken data; resolving to 0 keeps the character base look.
+  return episode?.episodeNo ?? 0
 }
 
 export async function generateEpisodeCharacterImages(
@@ -579,11 +663,11 @@ export async function generateEpisodeStoryboardFirstFrames(
   const shotsToGenerate = request.force
     ? storyboardRows
     : storyboardRows.filter((shot) => !shot.firstFrameImageUrl)
-  await ensureShotReferenceImages(deps, episode.projectId, shotsToGenerate)
+  await ensureShotReferenceImages(deps, episode.projectId, episode.episodeNo, shotsToGenerate)
 
   const specs: BatchTargetSpec[] = []
   for (const storyboard of storyboardRows) {
-    const composed = await composeStoryboardFirstFramePrompt(deps.db, episode.projectId, storyboard)
+    const composed = await composeStoryboardFirstFramePrompt(deps.db, episode.projectId, episode.episodeNo, storyboard)
     specs.push({
       targetId: storyboard.id,
       existingUrl: storyboard.firstFrameImageUrl,
@@ -606,6 +690,8 @@ export async function generateEpisodeStoryboardFirstFrames(
 
 export interface EnqueueStoryboardFirstFramesResult {
   episodeId: string
+  /** Parent aggregate for the submitted batch, or null when nothing needed work. */
+  jobId: string | null
   /** Storyboards considered after the optional `storyboardIds` filter. */
   total: number
   /** Task ids for the shots that were enqueued (status `pending`). */
@@ -675,12 +761,23 @@ export async function enqueueEpisodeStoryboardFirstFrames(
     toGenerate.push(storyboard)
   }
 
-  await ensureShotReferenceImages(deps, episode.projectId, toGenerate)
+  await ensureShotReferenceImages(deps, episode.projectId, episode.episodeNo, toGenerate)
+
+  const jobId = toGenerate.length > 0
+    ? await createGenerationJob(deps.db, {
+        projectId: episode.projectId,
+        episodeId,
+        jobType: 'storyboard_first_frame_batch',
+        totalCount: toGenerate.length,
+        skippedCount: skipped.length,
+      })
+    : null
 
   for (const storyboard of toGenerate) {
     const { prompt, referenceImages } = await composeStoryboardFirstFramePrompt(
       deps.db,
       episode.projectId,
+      episode.episodeNo,
       storyboard,
     )
     const taskId = await insertPendingImageTask(deps, {
@@ -693,6 +790,7 @@ export async function enqueueEpisodeStoryboardFirstFrames(
       force,
       episodeId: storyboard.episodeId,
       storyboardId: storyboard.id,
+      jobId,
       status: 'pending',
     })
     queued.push(taskId)
@@ -703,7 +801,7 @@ export async function enqueueEpisodeStoryboardFirstFrames(
     deps.scheduler?.notify()
   }
 
-  return { episodeId, total: rows.length, queued, skipped }
+  return { episodeId, jobId, total: rows.length, queued, skipped }
 }
 
 export async function generateAllEpisodeImages(
@@ -885,6 +983,25 @@ export async function executeImageGeneration(
 
       await updateTargetImageUrl(tx, input.targetType, input.targetId, providerResult.imageUrl, completedAt)
 
+      // Only shot first frames belong to an episode's image completion stage. Character/scene
+      // references are project assets and can be shared by many episodes.
+      const [taskRow] = await tx
+        .select({ episodeId: generationTasks.episodeId })
+        .from(generationTasks)
+        .where(eq(generationTasks.id, input.taskId))
+        .limit(1)
+      if (taskRow?.episodeId && input.targetType === 'storyboard_first_frame') {
+        await tx.insert(episodePipelineStates).values({ episodeId: taskRow.episodeId, updatedAt: completedAt }).onConflictDoNothing()
+        await tx
+          .update(episodePipelineStates)
+          .set({
+            imageRevision: sql`${episodePipelineStates.imageRevision} + 1`,
+            imagesStale: false,
+            updatedAt: completedAt,
+          })
+          .where(eq(episodePipelineStates.episodeId, taskRow.episodeId))
+      }
+
       await tx
         .update(generationTasks)
         .set({
@@ -992,6 +1109,43 @@ async function resolveImageTarget(
     }
   }
 
+  if (request.target_type === 'character_appearance_version') {
+    const [row] = await db
+      .select({ version: characterAppearanceVersions, character: characters })
+      .from(characterAppearanceVersions)
+      .innerJoin(characters, eq(characterAppearanceVersions.characterId, characters.id))
+      .where(and(eq(characterAppearanceVersions.id, request.target_id), eq(characters.projectId, projectId)))
+      .limit(1)
+
+    if (!row) {
+      throw new ImageGenerationServiceError(`Appearance version not found: ${request.target_id}`, 404)
+    }
+
+    const [project] = await db
+      .select({ visualStyle: projects.visualStyle })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1)
+
+    const source = await resolveVersionReferenceSource(db, row.version, row.character)
+
+    return {
+      projectId,
+      targetType: request.target_type,
+      targetId: row.version.id,
+      prompt:
+        request.prompt_override ??
+        composeAppearanceVersionPrompt(row.character, row.version, Boolean(source.url), project?.visualStyle),
+      existingUrl: row.version.referenceImageUrl,
+      episodeId: row.version.sourceEpisodeId,
+      referenceImages: source.url ? [source.url] : [],
+      needsBaseImage: source.needsBaseImage,
+      baseImageSpec: source.needsBaseImage
+        ? { characterId: row.character.id, prompt: composeCharacterReferencePrompt(row.character, project?.visualStyle) }
+        : undefined,
+    }
+  }
+
   const [storyboard] = await db
     .select()
     .from(storyboards)
@@ -1007,7 +1161,12 @@ async function resolveImageTarget(
   if (request.prompt_override) {
     prompt = request.prompt_override
   } else {
-    const composed = await composeStoryboardFirstFramePrompt(db, projectId, storyboard)
+    const composed = await composeStoryboardFirstFramePrompt(
+      db,
+      projectId,
+      await getEpisodeNo(db, storyboard.episodeId),
+      storyboard,
+    )
     prompt = composed.prompt
     referenceImages = composed.referenceImages
   }
@@ -1024,6 +1183,179 @@ async function resolveImageTarget(
   }
 }
 
+/**
+ * Reference-image prompt for a character's base look. Kept identical to the canonical
+ * `character_reference_image` path (batch/single) so a base image generated inline through the
+ * appearance-version chain carries the project visual style and stays style-consistent with the
+ * rest of the project.
+ */
+function composeCharacterReferencePrompt(
+  character: { name: string; role: string | null; appearance: string | null; personality: string | null },
+  visualStyle: string | null | undefined,
+) {
+  return compactPrompt([
+    character.name,
+    character.role,
+    character.appearance,
+    character.personality,
+    visualStyle ? `Project visual style: ${visualStyle}` : null,
+  ])
+}
+
+function composeAppearanceVersionPrompt(
+  character: { name: string; role: string | null },
+  version: { appearance: string },
+  hasReference: boolean,
+  visualStyle: string | null | undefined,
+) {
+  return compactPrompt([
+    character.name,
+    character.role,
+    version.appearance,
+    hasReference ? FACE_CONSISTENCY_INSTRUCTION : null,
+    visualStyle ? `Project visual style: ${visualStyle}` : null,
+  ])
+}
+
+interface VersionReferenceSource {
+  url: string | null
+  needsBaseImage: boolean
+}
+
+/**
+ * The image that anchors a version's identity: the nearest earlier version that already
+ * has an image, else the character's base reference image, else nothing yet
+ * (`needsBaseImage` — callers generate the base first). Pure over an already-loaded chain so
+ * a batch walk can resolve every version without re-querying (see {@link resolveVersionReferenceSource}).
+ */
+function resolveVersionReferenceFromChain(
+  chain: AppearanceVersionWithEffectiveNo[],
+  versionId: string,
+  character: { referenceImageUrl: string | null },
+): VersionReferenceSource {
+  const index = chain.findIndex((entry) => entry.version.id === versionId)
+
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const url = chain[i].version.referenceImageUrl
+    if (url) {
+      return { url, needsBaseImage: false }
+    }
+  }
+
+  if (character.referenceImageUrl) {
+    return { url: character.referenceImageUrl, needsBaseImage: false }
+  }
+
+  return { url: null, needsBaseImage: true }
+}
+
+/** Single-version convenience wrapper that loads the chain then delegates to {@link resolveVersionReferenceFromChain}. */
+async function resolveVersionReferenceSource(
+  db: DatabaseClient,
+  version: CharacterAppearanceVersion,
+  character: { referenceImageUrl: string | null },
+): Promise<VersionReferenceSource> {
+  const chain = await listCharacterAppearanceVersions(db, version.characterId)
+  return resolveVersionReferenceFromChain(chain, version.id, character)
+}
+
+/**
+ * Inline-generates images for the given appearance versions, per character in chain order
+ * (ascending effective episode), so a later version is conditioned on the freshly written
+ * image of the previous look. Generates the character base image first when the whole
+ * chain has nothing to condition on. Shared by the eager path (after asset extraction)
+ * and the lazy path ({@link ensureShotReferenceImages}).
+ */
+export async function ensureCharacterAppearanceVersionImages(
+  deps: ImageGenerationServiceDeps,
+  versionIds: string[],
+): Promise<BatchTargetResult[]> {
+  const results: BatchTargetResult[] = []
+  if (versionIds.length === 0) {
+    return results
+  }
+
+  const versionRows = await deps.db
+    .select()
+    .from(characterAppearanceVersions)
+    .where(inArray(characterAppearanceVersions.id, versionIds))
+
+  const characterIds = [...new Set(versionRows.map((row) => row.characterId))]
+
+  for (const characterId of characterIds) {
+    const [character] = await deps.db
+      .select()
+      .from(characters)
+      .where(eq(characters.id, characterId))
+      .limit(1)
+    if (!character) {
+      continue
+    }
+
+    const [project] = await deps.db
+      .select({ visualStyle: projects.visualStyle })
+      .from(projects)
+      .where(eq(projects.id, character.projectId))
+      .limit(1)
+
+    const wanted = new Set(versionRows.filter((row) => row.characterId === characterId).map((row) => row.id))
+    const chain = await listCharacterAppearanceVersions(deps.db, characterId)
+
+    for (const entry of chain) {
+      if (!wanted.has(entry.version.id)) {
+        continue
+      }
+      if (entry.version.referenceImageUrl) {
+        results.push({ targetId: entry.version.id, status: 'skipped' })
+        continue
+      }
+
+      // Resolve against the chain already loaded above; images generated earlier in this
+      // walk are threaded forward via the in-place mutations below, so no re-query is needed.
+      const source = resolveVersionReferenceFromChain(chain, entry.version.id, character)
+      let referenceUrl = source.url
+
+      if (source.needsBaseImage) {
+        const baseResult = await generateOneTarget(deps, {
+          projectId: character.projectId,
+          targetType: 'character_reference_image',
+          targetId: character.id,
+          prompt: composeCharacterReferencePrompt(character, project?.visualStyle),
+          existingUrl: null,
+          force: false,
+        })
+        if (baseResult.status !== 'completed' || !baseResult.imageUrl) {
+          results.push({
+            targetId: entry.version.id,
+            status: 'failed',
+            error: `Base reference image generation failed: ${baseResult.error ?? 'unknown'}`,
+          })
+          continue
+        }
+        character.referenceImageUrl = baseResult.imageUrl
+        referenceUrl = baseResult.imageUrl
+      }
+
+      const result = await generateOneTarget(deps, {
+        projectId: character.projectId,
+        targetType: 'character_appearance_version',
+        targetId: entry.version.id,
+        prompt: composeAppearanceVersionPrompt(character, entry.version, Boolean(referenceUrl), project?.visualStyle),
+        existingUrl: null,
+        force: false,
+        episodeId: entry.version.sourceEpisodeId,
+        referenceImages: referenceUrl ? [referenceUrl] : [],
+      })
+      if (result.status === 'completed' && result.imageUrl) {
+        entry.version.referenceImageUrl = result.imageUrl
+      }
+      results.push(result)
+    }
+  }
+
+  return results
+}
+
 // Upper bound on reference images per shot. Characters take priority over the scene:
 // too many references dilute subject fidelity, so we keep the people and drop the
 // least-important extras if a shot somehow references many assets.
@@ -1038,6 +1370,7 @@ interface ComposedStoryboardPrompt {
 async function composeStoryboardFirstFramePrompt(
   db: DatabaseClient,
   projectId: string,
+  episodeNo: number,
   storyboard: typeof storyboards.$inferSelect,
 ): Promise<ComposedStoryboardPrompt> {
   const parts: Array<string | null | undefined> = [
@@ -1064,10 +1397,20 @@ async function composeStoryboardFirstFramePrompt(
       .from(characters)
       .where(and(eq(characters.projectId, projectId), inArray(characters.id, characterIds)))
 
+    // Appearance and reference image are episode-dependent: a character may have
+    // appearance versions (scars, haircuts, time skips) that apply from some episode on.
+    const resolved = await resolveCharacterAppearances(
+      db,
+      characterRows.map((character) => character.id),
+      episodeNo,
+    )
+
     for (const character of characterRows) {
-      parts.push(`Character: ${character.name}`, character.appearance)
-      if (character.referenceImageUrl) {
-        characterRefs.push(character.referenceImageUrl)
+      const appearance = resolved.get(character.id)
+      parts.push(`Character: ${character.name}`, appearance?.appearance ?? character.appearance)
+      const referenceUrl = appearance?.referenceImageUrl ?? character.referenceImageUrl
+      if (referenceUrl) {
+        characterRefs.push(referenceUrl)
       }
     }
   }
@@ -1118,6 +1461,7 @@ async function composeStoryboardFirstFramePrompt(
 async function ensureShotReferenceImages(
   deps: ImageGenerationServiceDeps,
   projectId: string,
+  episodeNo: number,
   shots: Array<typeof storyboards.$inferSelect>,
 ): Promise<void> {
   const characterIds = new Set<string>()
@@ -1136,7 +1480,24 @@ async function ensureShotReferenceImages(
       .select()
       .from(characters)
       .where(and(eq(characters.projectId, projectId), inArray(characters.id, [...characterIds])))
+    const [project] = await deps.db
+      .select({ visualStyle: projects.visualStyle })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1)
+    const resolved = await resolveCharacterAppearances(deps.db, [...characterIds], episodeNo)
+    const missingVersionIds: string[] = []
     for (const character of rows) {
+      const appearance = resolved.get(character.id)
+      // A version is in effect for this episode: collect the ones missing an image so they
+      // can be generated in one batched, chain-aware pass below (generates the base first
+      // when nothing conditions them).
+      if (appearance?.versionId) {
+        if (!appearance.referenceImageUrl) {
+          missingVersionIds.push(appearance.versionId)
+        }
+        continue
+      }
       if (character.referenceImageUrl) {
         continue
       }
@@ -1144,10 +1505,13 @@ async function ensureShotReferenceImages(
         projectId,
         targetType: 'character_reference_image',
         targetId: character.id,
-        prompt: compactPrompt([character.name, character.role, character.appearance, character.personality]),
+        prompt: composeCharacterReferencePrompt(character, project?.visualStyle),
         existingUrl: null,
         force: false,
       })
+    }
+    if (missingVersionIds.length > 0) {
+      await ensureCharacterAppearanceVersionImages(deps, missingVersionIds)
     }
   }
 
@@ -1247,6 +1611,25 @@ async function updateTargetImageUrl(
 ) {
   if (targetType === 'character_reference_image') {
     await tx.update(characters).set({ referenceImageUrl: imageUrl, updatedAt }).where(eq(characters.id, targetId))
+    return
+  }
+
+  if (targetType === 'character_appearance_version') {
+    // The version row may have been cascade-deleted (re-plan, force re-extraction) while
+    // this task was in flight; failing here rolls back the asset insert so no orphaned
+    // active asset is left behind, and the task is marked failed.
+    const [version] = await tx
+      .select({ id: characterAppearanceVersions.id })
+      .from(characterAppearanceVersions)
+      .where(eq(characterAppearanceVersions.id, targetId))
+      .limit(1)
+    if (!version) {
+      throw new ImageGenerationServiceError(`Appearance version no longer exists: ${targetId}`, 409)
+    }
+    await tx
+      .update(characterAppearanceVersions)
+      .set({ referenceImageUrl: imageUrl, updatedAt })
+      .where(eq(characterAppearanceVersions.id, targetId))
     return
   }
 

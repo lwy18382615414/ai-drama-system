@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { eq } from 'drizzle-orm'
 import type { DatabaseClient } from '../../../packages/database/index.js'
+import { generationTasks } from '../../../packages/database/index.js'
 import type { ImageProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { handleServiceError, invalidQuery, invalidRequestBody, notFound, ok } from '../api-response.js'
@@ -24,6 +26,7 @@ import {
   StartStoryboardFirstFrameRequestSchema,
   type BatchImageGenerationRequest,
 } from '../services/image-generation-service.js'
+import { cancelGenerationJob, getGenerationJob } from '../services/generation-job-service.js'
 
 export interface ImageGenerationRouteDeps {
   db: DatabaseClient
@@ -225,6 +228,56 @@ export function createImageGenerationRoutes(deps: ImageGenerationRouteDeps) {
       }
 
       return ok(c, { task })
+    } catch (error) {
+      return handleServiceError(c, error)
+    }
+  })
+
+  /** Cooperative cancellation: queued work becomes terminal immediately; a running handler
+   * observes the persisted request when it settles and will not be retried. */
+  app.post('/api/generation-tasks/:taskId/cancel', async (c) => {
+    try {
+      const [task] = await deps.db
+        .select()
+        .from(generationTasks)
+        .where(eq(generationTasks.id, c.req.param('taskId')))
+        .limit(1)
+
+      if (!task) return notFound(c, 'Generation task not found')
+      if (['completed', 'failed', 'cancelled'].includes(task.status)) return ok(c, { task })
+
+      const now = new Date().toISOString()
+      const isQueued = task.status === 'pending' || task.status === 'retry_wait'
+      await deps.db
+        .update(generationTasks)
+        .set(
+          isQueued
+            ? { status: 'cancelled', cancelRequestedAt: now, completedAt: now, nextRetryAt: null, updatedAt: now }
+            : { cancelRequestedAt: now, updatedAt: now },
+        )
+        .where(eq(generationTasks.id, task.id))
+
+      const [updated] = await deps.db.select().from(generationTasks).where(eq(generationTasks.id, task.id)).limit(1)
+      if (updated) await deps.scheduler.announce(updated.id)
+      return ok(c, { task: updated ?? task })
+    } catch (error) {
+      return handleServiceError(c, error)
+    }
+  })
+
+  app.get('/api/generation-jobs/:jobId', async (c) => {
+    try {
+      const job = await getGenerationJob(deps.db, c.req.param('jobId'))
+      return job ? ok(c, { job }) : notFound(c, 'Generation job not found')
+    } catch (error) {
+      return handleServiceError(c, error)
+    }
+  })
+
+  app.post('/api/generation-jobs/:jobId/cancel', async (c) => {
+    try {
+      const job = await cancelGenerationJob(deps.db, deps.scheduler, c.req.param('jobId'))
+      return job ? ok(c, { job }) : notFound(c, 'Generation job not found')
     } catch (error) {
       return handleServiceError(c, error)
     }

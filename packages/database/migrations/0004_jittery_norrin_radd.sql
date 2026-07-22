@@ -1,0 +1,1 @@
+ALTER TABLE `generation_tasks` ADD `cancel_requested_at` text;

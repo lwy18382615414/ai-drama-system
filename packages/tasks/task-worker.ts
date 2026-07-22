@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, lte, or } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
 import type { DatabaseClient, GenerationTask } from '../database/index.js'
-import { generationTasks } from '../database/index.js'
+import { generationJobs, generationTasks } from '../database/index.js'
 import { enrichTaskEvent, type TaskEvent, type TaskEventBus } from './task-event.js'
 
 /** Reconstructs a task's execution from its persisted row (input lives in `inputJson`) and runs it. */
@@ -25,6 +26,12 @@ export interface TaskWorkerOptions {
   maxRetries?: number
   /** Safety poll interval (ms) that backstops missed `notify()` calls and recovers stragglers. */
   pollIntervalMs?: number
+  /** Lease duration for a claimed task. A stale lease is recoverable without process restart. */
+  leaseDurationMs?: number
+  /** Stable identity recorded on task leases; override in tests or a separately deployed worker. */
+  workerId?: string
+  /** Initial retry delay; subsequent failures back off exponentially with a small jitter. */
+  retryBaseDelayMs?: number
 }
 
 /**
@@ -40,6 +47,9 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
   private readonly concurrency: number
   private readonly maxRetries: number
   private readonly pollIntervalMs: number
+  private readonly leaseDurationMs: number
+  private readonly workerId: string
+  private readonly retryBaseDelayMs: number
 
   private started = false
   private draining = false
@@ -52,6 +62,9 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
     this.concurrency = options.concurrency ?? 2
     this.maxRetries = options.maxRetries ?? 2
     this.pollIntervalMs = options.pollIntervalMs ?? 30_000
+    this.leaseDurationMs = options.leaseDurationMs ?? 60_000
+    this.workerId = options.workerId ?? `worker-${randomUUID()}`
+    this.retryBaseDelayMs = options.retryBaseDelayMs ?? 250
   }
 
   register(taskType: string, handler: TaskHandler): void {
@@ -62,7 +75,9 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
   start(): void {
     if (this.started) return
     this.started = true
-    this.pollTimer = setInterval(() => void this.drain(), this.pollIntervalMs)
+    this.pollTimer = setInterval(() => {
+      void this.recover().finally(() => this.drain())
+    }, this.pollIntervalMs)
     // Don't let the safety poll keep the process (or a test runner) alive on its own.
     this.pollTimer.unref?.()
     void this.bootstrap()
@@ -135,15 +150,32 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
   }
 
   /**
-   * Requeues tasks a previous process left mid-flight (`running`) back to `pending` so they get
-   * re-dispatched. Safe to call before any task is in flight in this process.
+   * Requeues only abandoned work. A healthy task owns a renewable lease, so a second worker or
+   * process restart cannot blindly replay all `running` rows and duplicate an in-flight provider call.
    */
   async recover(): Promise<void> {
     const now = new Date().toISOString()
     await this.db
       .update(generationTasks)
-      .set({ status: 'pending', startedAt: null, updatedAt: now })
-      .where(eq(generationTasks.status, 'running'))
+      .set({
+        status: 'pending',
+        lockedBy: null,
+        lockedAt: null,
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        updatedAt: now,
+      })
+      .where(and(
+        eq(generationTasks.status, 'running'),
+        or(isNull(generationTasks.leaseExpiresAt), lte(generationTasks.leaseExpiresAt, now)),
+      ))
+
+    // A retry becomes claimable only after its persisted backoff time. The promotion makes the
+    // state visible to old SSE clients while preserving a durable retry schedule.
+    await this.db
+      .update(generationTasks)
+      .set({ status: 'pending', nextRetryAt: null, updatedAt: now })
+      .where(and(eq(generationTasks.status, 'retry_wait'), lte(generationTasks.nextRetryAt, now)))
   }
 
   private async bootstrap(): Promise<void> {
@@ -174,21 +206,37 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
     }
   }
 
-  /** Atomically claims the oldest pending task (pending -> running). Returns undefined if none. */
+  /** Atomically claims the oldest ready task (pending -> running). Returns undefined if none. */
   private async claimNext(): Promise<GenerationTask | undefined> {
+    const now = new Date().toISOString()
     const [task] = await this.db
       .select()
       .from(generationTasks)
-      .where(eq(generationTasks.status, 'pending'))
+      .where(and(
+        eq(generationTasks.status, 'pending'),
+        or(isNull(generationTasks.nextRetryAt), lte(generationTasks.nextRetryAt, now)),
+      ))
       .orderBy(asc(generationTasks.createdAt))
       .limit(1)
 
     if (!task) return undefined
 
-    const now = new Date().toISOString()
+    const leaseExpiresAt = new Date(Date.now() + this.leaseDurationMs).toISOString()
     const result = await this.db
       .update(generationTasks)
-      .set({ status: 'running', startedAt: now, updatedAt: now, errorMessage: null })
+      .set({
+        status: 'running',
+        startedAt: task.startedAt ?? now,
+        lockedBy: this.workerId,
+        lockedAt: now,
+        heartbeatAt: now,
+        leaseExpiresAt,
+        nextRetryAt: null,
+        updatedAt: now,
+        errorMessage: null,
+        errorCode: null,
+        errorDetailsJson: null,
+      })
       .where(and(eq(generationTasks.id, task.id), eq(generationTasks.status, 'pending')))
 
     if ((result.rowsAffected ?? 0) < 1) {
@@ -196,13 +244,32 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
       return this.claimNext()
     }
 
-    const claimed = { ...task, status: 'running', startedAt: now, updatedAt: now, errorMessage: null }
+    const claimed = {
+      ...task,
+      status: 'running',
+      startedAt: task.startedAt ?? now,
+      lockedBy: this.workerId,
+      lockedAt: now,
+      heartbeatAt: now,
+      leaseExpiresAt,
+      nextRetryAt: null,
+      updatedAt: now,
+      errorMessage: null,
+      errorCode: null,
+      errorDetailsJson: null,
+    }
     void this.emitEvent(claimed)
     return claimed
   }
 
   private async runClaimed(task: GenerationTask): Promise<void> {
+    const heartbeat = setInterval(() => void this.renewLease(task.id), Math.max(1_000, this.leaseDurationMs / 2))
+    heartbeat.unref?.()
     try {
+      if (task.cancelRequestedAt) {
+        await this.markCancelled(task.id)
+        return
+      }
       const handler = this.handlers.get(task.taskType)
       if (!handler) {
         await this.markFailed(task.id, `No handler registered for task type: ${task.taskType}`)
@@ -217,31 +284,46 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
         await this.markFailed(task.id, error)
       }
 
+      await this.settleCancelledTask(task.id)
       await this.maybeRetry(task.id)
     } finally {
+      clearInterval(heartbeat)
+      await this.releaseLease(task.id)
+      await this.refreshJob(task.jobId)
       // Emit the settled state (completed / failed / requeued-to-pending) to any subscribers.
       await this.emitCurrent(task.id)
     }
   }
 
-  /** If the handler left the task `failed` and retries remain, requeue it as `pending`. */
+  /** If the handler left the task `failed` and retries remain, persist an exponential-backoff retry. */
   private async maybeRetry(taskId: string): Promise<void> {
     const [task] = await this.db.select().from(generationTasks).where(eq(generationTasks.id, taskId)).limit(1)
     if (!task || task.status !== 'failed') return
     if (task.retryCount >= this.maxRetries) return
 
-    const now = new Date().toISOString()
+    const now = new Date()
+    const delayMs = Math.min(60_000, this.retryBaseDelayMs * 2 ** task.retryCount) + Math.floor(Math.random() * 50)
     await this.db
       .update(generationTasks)
       .set({
-        status: 'pending',
+        status: 'retry_wait',
         retryCount: task.retryCount + 1,
         errorMessage: null,
+        errorCode: null,
+        errorDetailsJson: null,
         startedAt: null,
         completedAt: null,
-        updatedAt: now,
+        nextRetryAt: new Date(now.getTime() + delayMs).toISOString(),
+        updatedAt: now.toISOString(),
       })
       .where(eq(generationTasks.id, taskId))
+
+    // The periodic recovery poll is crash-safe; this timer is only a latency optimization for a
+    // live worker and promotes the persisted retry before waking the drain loop.
+    const retryTimer = setTimeout(() => {
+      void this.promoteDueRetries().finally(() => this.notify())
+    }, delayMs)
+    retryTimer.unref?.()
   }
 
   private async markFailed(taskId: string, error: unknown): Promise<void> {
@@ -249,7 +331,89 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
     const message = error instanceof Error ? error.message : String(error)
     await this.db
       .update(generationTasks)
-      .set({ status: 'failed', errorMessage: message, completedAt: now, updatedAt: now })
+      .set({
+        status: 'failed',
+        errorMessage: message,
+        errorCode: 'internal_error',
+        errorDetailsJson: JSON.stringify({ message }),
+        completedAt: now,
+        updatedAt: now,
+      })
       .where(eq(generationTasks.id, taskId))
+
+  }
+
+  private async renewLease(taskId: string): Promise<void> {
+    const now = new Date()
+    await this.db
+      .update(generationTasks)
+      .set({ heartbeatAt: now.toISOString(), leaseExpiresAt: new Date(now.getTime() + this.leaseDurationMs).toISOString(), updatedAt: now.toISOString() })
+      .where(and(eq(generationTasks.id, taskId), eq(generationTasks.status, 'running'), eq(generationTasks.lockedBy, this.workerId)))
+  }
+
+  private async promoteDueRetries(): Promise<void> {
+    const now = new Date().toISOString()
+    await this.db
+      .update(generationTasks)
+      .set({ status: 'pending', nextRetryAt: null, updatedAt: now })
+      .where(and(eq(generationTasks.status, 'retry_wait'), lte(generationTasks.nextRetryAt, now)))
+  }
+
+  private async releaseLease(taskId: string): Promise<void> {
+    const now = new Date().toISOString()
+    await this.db
+      .update(generationTasks)
+      .set({ lockedBy: null, lockedAt: null, heartbeatAt: null, leaseExpiresAt: null, updatedAt: now })
+      .where(and(eq(generationTasks.id, taskId), eq(generationTasks.lockedBy, this.workerId)))
+  }
+
+  private async settleCancelledTask(taskId: string): Promise<void> {
+    const [task] = await this.db.select().from(generationTasks).where(eq(generationTasks.id, taskId)).limit(1)
+    // Runners own their success/failure writes and therefore commonly change `running` to
+    // `completed` before returning. A cancellation requested while the provider was in flight
+    // must still win over that handler-written terminal state and must not be retried.
+    if (task?.cancelRequestedAt && task.status !== 'cancelled') await this.markCancelled(taskId)
+  }
+
+  private async markCancelled(taskId: string): Promise<void> {
+    const now = new Date().toISOString()
+    await this.db
+      .update(generationTasks)
+      .set({ status: 'cancelled', completedAt: now, nextRetryAt: null, updatedAt: now })
+      .where(eq(generationTasks.id, taskId))
+  }
+
+  private async refreshJob(jobId: string | null): Promise<void> {
+    if (!jobId) return
+    const [job] = await this.db.select().from(generationJobs).where(eq(generationJobs.id, jobId)).limit(1)
+    if (!job) return
+    const tasks = await this.db.select().from(generationTasks).where(eq(generationTasks.jobId, jobId))
+    const count = (statuses: string[]) => tasks.filter((task) => statuses.includes(task.status)).length
+    const pendingCount = count(['pending', 'retry_wait'])
+    const runningCount = count(['running'])
+    const succeededCount = count(['completed'])
+    const failedCount = count(['failed'])
+    const cancelledCount = count(['cancelled'])
+    const totalCount = Math.max(job.totalCount, tasks.length)
+    const done = succeededCount + failedCount + cancelledCount
+    const status = job.cancelRequestedAt
+      ? (runningCount > 0 ? 'cancelling' : 'cancelled')
+      : failedCount > 0 && pendingCount + runningCount === 0
+        ? 'failed'
+        : pendingCount + runningCount > 0
+          ? (runningCount > 0 ? 'running' : 'pending')
+          : 'completed'
+    const now = new Date().toISOString()
+    await this.db.update(generationJobs).set({
+      status,
+      totalCount,
+      pendingCount,
+      runningCount,
+      succeededCount,
+      failedCount,
+      skippedCount: job.skippedCount,
+      progressPercent: totalCount === 0 ? 100 : Math.round((done / totalCount) * 100),
+      updatedAt: now,
+    }).where(eq(generationJobs.id, jobId))
   }
 }

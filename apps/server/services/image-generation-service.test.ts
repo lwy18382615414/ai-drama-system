@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import {
   assets,
+  characterAppearanceVersions,
   characters,
   createDatabase,
   episodes,
@@ -20,6 +21,8 @@ import {
 import { startTestWorker } from '../test-helpers/task-worker.js'
 import {
   ImageGenerationServiceError,
+  ensureCharacterAppearanceVersionImages,
+  startAppearanceVersionImageGeneration,
   startCharacterReferenceImageGeneration,
   startImageGeneration,
   startSceneReferenceImageGeneration,
@@ -370,6 +373,341 @@ describe('image-generation-service', () => {
     expect(task.errorMessage).toBe('mock provider failed')
   })
 })
+
+describe('character appearance versions', () => {
+  it('rejects a missing appearance version', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+
+    await expect(
+      startAppearanceVersionImageGeneration(imageDeps(db, new MockImageProvider()), 'missing-version', {}),
+    ).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('generates a version image conditioned on the character base image', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+    await seedAppearanceVersion(db)
+    await db
+      .update(characters)
+      .set({ referenceImageUrl: '/static/mock-images/base.png' })
+      .where(eq(characters.id, 'character-1'))
+    let providerRequest: ImageGenerationRequest | undefined
+
+    const result = await startAppearanceVersionImageGeneration(
+      imageDeps(
+        db,
+        new MockImageProvider((request) => {
+          providerRequest = request
+          return '/static/mock-images/version-1.png'
+        }),
+      ),
+      'version-1',
+      {},
+    )
+
+    const task = await waitForTask(db, result.taskId)
+    expect(task.status).toBe('completed')
+    expect(task.targetType).toBe('character_appearance_version')
+    expect(task.targetId).toBe('version-1')
+
+    expect(providerRequest?.referenceImages).toEqual(['/static/mock-images/base.png'])
+    expect(providerRequest?.prompt).toContain('scarred face, black dress')
+    expect(providerRequest?.prompt).toContain('Keep the exact same face')
+    expect(providerRequest?.prompt).toContain('Project visual style: realistic')
+
+    const [version] = await db.select().from(characterAppearanceVersions).where(eq(characterAppearanceVersions.id, 'version-1'))
+    expect(version.referenceImageUrl).toBe('/static/mock-images/version-1.png')
+
+    const [asset] = await db.select().from(assets).where(eq(assets.generationTaskId, result.taskId))
+    expect(asset.assetType).toBe('character_appearance_version')
+    expect(asset.status).toBe('active')
+  })
+
+  it('generates the character base image first when nothing conditions the version', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+    await seedAppearanceVersion(db)
+    const requests: ImageGenerationRequest[] = []
+    let counter = 0
+
+    const result = await startAppearanceVersionImageGeneration(
+      imageDeps(
+        db,
+        new MockImageProvider((request) => {
+          requests.push(request)
+          counter += 1
+          return `/static/mock-images/gen-${counter}.png`
+        }),
+      ),
+      'version-1',
+      {},
+    )
+
+    await waitForTask(db, result.taskId)
+
+    const [character] = await db.select().from(characters).where(eq(characters.id, 'character-1'))
+    expect(character.referenceImageUrl).toBe('/static/mock-images/gen-1.png')
+
+    const [version] = await db.select().from(characterAppearanceVersions).where(eq(characterAppearanceVersions.id, 'version-1'))
+    expect(version.referenceImageUrl).toBe('/static/mock-images/gen-2.png')
+
+    // First call = base (no reference), second call = version conditioned on the base.
+    expect(requests[0].referenceImages ?? []).toEqual([])
+    expect(requests[1].referenceImages).toEqual(['/static/mock-images/gen-1.png'])
+    // The inline base image must carry the project visual style, like the canonical
+    // character_reference_image path, so the chain anchors on a style-consistent base.
+    expect(requests[0].prompt).toContain('Project visual style: realistic')
+  })
+
+  it('rejects regeneration without force and supersedes the old asset with force', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+    await seedAppearanceVersion(db, { referenceImageUrl: '/static/mock-images/v1-old.png' })
+    const now = new Date().toISOString()
+    await db.insert(assets).values({
+      id: 'asset-version-old',
+      projectId: 'project-1',
+      assetType: 'character_appearance_version',
+      targetType: 'character_appearance_version',
+      targetId: 'version-1',
+      generationTaskId: null,
+      url: '/static/mock-images/v1-old.png',
+      provider: 'mock',
+      model: 'mock-image-v1',
+      prompt: 'old',
+      metadataJson: '{}',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    await expect(
+      startAppearanceVersionImageGeneration(
+        imageDeps(db, new MockImageProvider(() => '/static/mock-images/v1-new.png')),
+        'version-1',
+        {},
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 })
+
+    const result = await startAppearanceVersionImageGeneration(
+      imageDeps(db, new MockImageProvider(() => '/static/mock-images/v1-new.png')),
+      'version-1',
+      { force: true },
+    )
+    await waitForTask(db, result.taskId)
+
+    const [oldAsset] = await db.select().from(assets).where(eq(assets.id, 'asset-version-old'))
+    expect(oldAsset.status).toBe('superseded')
+
+    const [version] = await db.select().from(characterAppearanceVersions).where(eq(characterAppearanceVersions.id, 'version-1'))
+    expect(version.referenceImageUrl).toBe('/static/mock-images/v1-new.png')
+  })
+
+  it('fills a version chain in order, each conditioned on the previous image', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+    await seedAppearanceVersion(db)
+    await seedEpisode(db, 'episode-3', 3)
+    await db.insert(characterAppearanceVersions).values({
+      id: 'version-2',
+      characterId: 'character-1',
+      sourceEpisodeId: 'episode-3',
+      effectiveFromEpisodeNo: null,
+      appearance: 'white hair, black dress',
+      referenceImageUrl: null,
+      changeReason: 'time skip',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    await db
+      .update(characters)
+      .set({ referenceImageUrl: '/static/mock-images/base.png' })
+      .where(eq(characters.id, 'character-1'))
+
+    const requests: ImageGenerationRequest[] = []
+    let counter = 0
+    const deps = imageDeps(
+      db,
+      new MockImageProvider((request) => {
+        requests.push(request)
+        counter += 1
+        return `/static/mock-images/chain-${counter}.png`
+      }),
+    )
+
+    const results = await ensureCharacterAppearanceVersionImages(deps, ['version-2', 'version-1'])
+    expect(results.map((r) => [r.targetId, r.status])).toEqual([
+      ['version-1', 'completed'],
+      ['version-2', 'completed'],
+    ])
+
+    // v1 conditioned on the base image, v2 on the freshly generated v1 image.
+    expect(requests[0].referenceImages).toEqual(['/static/mock-images/base.png'])
+    expect(requests[1].referenceImages).toEqual(['/static/mock-images/chain-1.png'])
+
+    const versionRows = await db.select().from(characterAppearanceVersions)
+    const byId = new Map(versionRows.map((row) => [row.id, row]))
+    expect(byId.get('version-1')?.referenceImageUrl).toBe('/static/mock-images/chain-1.png')
+    expect(byId.get('version-2')?.referenceImageUrl).toBe('/static/mock-images/chain-2.png')
+  })
+
+  it('uses the version appearance and image for storyboard frames in later episodes', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+    await seedAppearanceVersion(db, { referenceImageUrl: '/static/mock-images/version-1.png' })
+    await db
+      .update(characters)
+      .set({ referenceImageUrl: '/static/mock-images/base.png' })
+      .where(eq(characters.id, 'character-1'))
+    await db
+      .update(scenes)
+      .set({ referenceImageUrl: '/static/mock-images/scene.png' })
+      .where(eq(scenes.id, 'scene-1'))
+    await seedStoryboard(db, 'storyboard-2', 'episode-2')
+
+    let providerRequest: ImageGenerationRequest | undefined
+    const deps = imageDeps(
+      db,
+      new MockImageProvider((request) => {
+        providerRequest = request
+        return '/static/mock-images/frame.png'
+      }),
+    )
+
+    // Episode 2 shot → version appearance and version image are in effect.
+    const result = await startImageGeneration(deps, 'project-1', {
+      target_type: 'storyboard_first_frame',
+      target_id: 'storyboard-2',
+    })
+    await waitForTask(db, result.taskId)
+    expect(providerRequest?.prompt).toContain('scarred face, black dress')
+    expect(providerRequest?.referenceImages).toEqual([
+      '/static/mock-images/version-1.png',
+      '/static/mock-images/scene.png',
+    ])
+
+    // Episode 1 shot → base appearance and base image.
+    const result1 = await startImageGeneration(deps, 'project-1', {
+      target_type: 'storyboard_first_frame',
+      target_id: 'storyboard-1',
+    })
+    await waitForTask(db, result1.taskId)
+    expect(providerRequest?.prompt).toContain('black dress, calm but determined expression')
+    expect(providerRequest?.prompt).not.toContain('scarred face')
+    expect(providerRequest?.referenceImages).toEqual([
+      '/static/mock-images/base.png',
+      '/static/mock-images/scene.png',
+    ])
+  })
+
+  it('back-fills a missing version image before generating an episode-2 shot frame', async () => {
+    const db = await createTestDb()
+    await seedImageGenerationContext(db)
+    await seedAppearanceVersion(db)
+    await db
+      .update(characters)
+      .set({ referenceImageUrl: '/static/mock-images/base.png' })
+      .where(eq(characters.id, 'character-1'))
+    await db
+      .update(scenes)
+      .set({ referenceImageUrl: '/static/mock-images/scene.png' })
+      .where(eq(scenes.id, 'scene-1'))
+    await seedStoryboard(db, 'storyboard-2', 'episode-2')
+
+    const requests: ImageGenerationRequest[] = []
+    let counter = 0
+    const deps = imageDeps(
+      db,
+      new MockImageProvider((request) => {
+        requests.push(request)
+        counter += 1
+        return `/static/mock-images/lazy-${counter}.png`
+      }),
+    )
+
+    const result = await startImageGeneration(deps, 'project-1', {
+      target_type: 'storyboard_first_frame',
+      target_id: 'storyboard-2',
+    })
+    await waitForTask(db, result.taskId)
+
+    const [version] = await db.select().from(characterAppearanceVersions).where(eq(characterAppearanceVersions.id, 'version-1'))
+    expect(version.referenceImageUrl).toBe('/static/mock-images/lazy-1.png')
+
+    // The frame task carries the freshly generated version image, not the base.
+    const frameRequest = requests[requests.length - 1]
+    expect(frameRequest.referenceImages).toEqual(['/static/mock-images/lazy-1.png', '/static/mock-images/scene.png'])
+  })
+})
+
+async function seedEpisode(db: DatabaseClient, id: string, episodeNo: number) {
+  const now = new Date().toISOString()
+  await db.insert(episodes).values({
+    id,
+    projectId: 'project-1',
+    episodeNo,
+    title: `第${episodeNo}集`,
+    summary: null,
+    openingHook: null,
+    endingHook: null,
+    scriptId: null,
+    videoUrl: null,
+    status: 'storyboard_ready',
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+/** Adds episode 2 and one auto appearance version (sourced from it) for character-1. */
+async function seedAppearanceVersion(db: DatabaseClient, overrides: { referenceImageUrl?: string | null } = {}) {
+  const now = new Date().toISOString()
+  await seedEpisode(db, 'episode-2', 2)
+  await db.insert(characterAppearanceVersions).values({
+    id: 'version-1',
+    characterId: 'character-1',
+    sourceEpisodeId: 'episode-2',
+    effectiveFromEpisodeNo: null,
+    appearance: 'scarred face, black dress',
+    referenceImageUrl: overrides.referenceImageUrl ?? null,
+    changeReason: 'injured in episode 2',
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+async function seedStoryboard(db: DatabaseClient, id: string, episodeId: string) {
+  const now = new Date().toISOString()
+  await db.insert(storyboards).values({
+    id,
+    projectId: 'project-1',
+    episodeId,
+    shotNo: 1,
+    duration: 5,
+    sceneId: 'scene-1',
+    characterIdsJson: JSON.stringify(['character-1']),
+    propIdsJson: '[]',
+    scriptSectionNo: 1,
+    shotType: 'medium',
+    cameraAngle: 'eye_level',
+    cameraMovement: 'static',
+    action: 'Lin Wan re-enters after the injury.',
+    dialogueJson: '[]',
+    narration: null,
+    emotion: 'tense',
+    imagePrompt: 'cinematic medium shot of a determined woman',
+    videoPrompt: 'static camera',
+    firstFrameImageUrl: null,
+    lastFrameImageUrl: null,
+    videoUrl: null,
+    ttsAudioUrl: null,
+    subtitleUrl: null,
+    composedVideoUrl: null,
+    status: 'draft',
+    createdAt: now,
+    updatedAt: now,
+  })
+}
 
 async function seedImageGenerationContext(db: DatabaseClient) {
   const now = new Date().toISOString()

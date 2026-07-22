@@ -3,6 +3,8 @@ import { eq } from 'drizzle-orm'
 import { createDatabase, initializeDatabase, type DatabaseClient } from '../../../database/index.js'
 import {
   agentRuns,
+  assets,
+  characterAppearanceVersions,
   characters,
   episodeCharacterLinks,
   episodePropLinks,
@@ -468,6 +470,137 @@ describe('ExtractAgent', () => {
 
     const [task] = await db.select().from(generationTasks).limit(1)
     expect(task.status).toBe('failed')
+  })
+
+  it('creates an appearance version when an existing character has appearance_change', async () => {
+    const db = await createTestDb()
+    const input = await seedExtractContext(db)
+    await seedExistingAssets(db)
+    const output = createProviderOutput()
+    output.characters[0].appearance_change = {
+      new_appearance: '黑色礼服，左脸有一道疤痕。',
+      reason: '宴会冲突中被划伤，留下永久疤痕。',
+    }
+    const provider = new MockStructuredTextProvider(() => output)
+
+    const result = await runExtractAgent({ db, provider, input })
+
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.appearanceVersions).toEqual([
+      { versionId: expect.any(String), characterId: 'character-existing', action: 'created' },
+    ])
+
+    const versions = await db.select().from(characterAppearanceVersions)
+    expect(versions).toHaveLength(1)
+    expect(versions[0].characterId).toBe('character-existing')
+    expect(versions[0].sourceEpisodeId).toBe('episode-1')
+    expect(versions[0].effectiveFromEpisodeNo).toBeNull()
+    expect(versions[0].appearance).toBe('黑色礼服，左脸有一道疤痕。')
+    expect(versions[0].referenceImageUrl).toBeNull()
+  })
+
+  it('updates the version and supersedes its image on force re-extraction with a different change', async () => {
+    const db = await createTestDb()
+    const input = await seedExtractContext(db)
+    await seedExistingAssets(db)
+    const now = new Date().toISOString()
+
+    const output = createProviderOutput()
+    output.characters[0].appearance_change = { new_appearance: '版本一外观。', reason: null }
+    const first = await runExtractAgent({ db, provider: new MockStructuredTextProvider(() => output), input })
+    expect(first.success).toBe(true)
+    if (!first.success) return
+    const versionId = first.appearanceVersions[0].versionId
+
+    await db.insert(assets).values({
+      id: 'asset-v1',
+      projectId: 'project-1',
+      assetType: 'character_appearance_version',
+      targetType: 'character_appearance_version',
+      targetId: versionId,
+      url: '/static/v1.png',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const output2 = createProviderOutput()
+    output2.characters[0].appearance_change = { new_appearance: '版本二外观。', reason: '再次受伤' }
+    const second = await runExtractAgent({
+      db,
+      provider: new MockStructuredTextProvider(() => output2),
+      input: { ...input, options: { force: true } },
+    })
+    expect(second.success).toBe(true)
+    if (!second.success) return
+    expect(second.appearanceVersions).toEqual([
+      { versionId, characterId: 'character-existing', action: 'updated' },
+    ])
+
+    const versions = await db.select().from(characterAppearanceVersions)
+    expect(versions).toHaveLength(1)
+    expect(versions[0].appearance).toBe('版本二外观。')
+    expect(versions[0].referenceImageUrl).toBeNull()
+
+    const [asset] = await db.select().from(assets).where(eq(assets.id, 'asset-v1'))
+    expect(asset.status).toBe('superseded')
+  })
+
+  it('deletes the version when a force re-extraction no longer reports a change', async () => {
+    const db = await createTestDb()
+    const input = await seedExtractContext(db)
+    await seedExistingAssets(db)
+    const now = new Date().toISOString()
+
+    const output = createProviderOutput()
+    output.characters[0].appearance_change = { new_appearance: '版本一外观。', reason: null }
+    const first = await runExtractAgent({ db, provider: new MockStructuredTextProvider(() => output), input })
+    expect(first.success).toBe(true)
+    if (!first.success) return
+    const versionId = first.appearanceVersions[0].versionId
+
+    await db.insert(assets).values({
+      id: 'asset-v1',
+      projectId: 'project-1',
+      assetType: 'character_appearance_version',
+      targetType: 'character_appearance_version',
+      targetId: versionId,
+      url: '/static/v1.png',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const second = await runExtractAgent({
+      db,
+      provider: new MockStructuredTextProvider(() => createProviderOutput()),
+      input: { ...input, options: { force: true } },
+    })
+    expect(second.success).toBe(true)
+    if (!second.success) return
+    expect(second.appearanceVersions).toEqual([])
+
+    const versions = await db.select().from(characterAppearanceVersions)
+    expect(versions).toHaveLength(0)
+
+    const [asset] = await db.select().from(assets).where(eq(assets.id, 'asset-v1'))
+    expect(asset.status).toBe('superseded')
+  })
+
+  it('ignores appearance_change on new characters', async () => {
+    const db = await createTestDb()
+    const input = await seedExtractContext(db)
+    const output = createProviderOutput()
+    output.characters[0].appearance_change = { new_appearance: '不应产生版本。', reason: null }
+    const provider = new MockStructuredTextProvider(() => output)
+
+    const result = await runExtractAgent({ db, provider, input })
+
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.appearanceVersions).toEqual([])
+    expect(await db.select().from(characterAppearanceVersions)).toHaveLength(0)
   })
 
   it('rejects duplicate normalized names in one output category', async () => {

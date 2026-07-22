@@ -200,6 +200,16 @@ Status: not started.
 
 Potential future work may include advanced workbench editing, review loops, project memory expansion, production pipeline automation, and deployment hardening. These phases are not active and should not be implemented without explicit direction.
 
+## Next Approved Refactor Sequence
+
+The next work is backend hardening, defined in `docs/backend-refactor-plan.md`; it is not an activation of video/media generation.
+
+1. **Reliability foundation (P0):** SQLite WAL/busy timeout/foreign-key verification, tested backup and restore, task lease/heartbeat/timeout recovery, revision-aware idempotency, re-entrant image persistence, standard error classes, one Zod repair attempt, cancellation, and usage/cost records.
+2. **Revision and invalidation (P0):** planning/script/asset/storyboard/image revisions, stale and superseded propagation, impact preview, active-version switching and rollback support.
+3. **Batch production (P1):** parent `generation_jobs`, aggregate progress/cancellation/retry, derived episode pipeline status, task-type concurrency/priority and dependency-aware scheduling.
+4. **Production infrastructure (P1):** PostgreSQL, BullMQ/Redis or PostgreSQL queue, cross-process SSE events, object storage, split API/narrative/image workers and monitoring. User/tenant permissions and quotas are added before public registration, not speculatively.
+5. **Media generation (later):** only after the above acceptance criteria pass, introduce video/TTS/subtitle/composition task types and DAG orchestration.
+
 ## Documentation Maintenance Rule
 
 When phase status changes, update all of the following files together:

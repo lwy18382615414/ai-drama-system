@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { DatabaseClient } from '../../database/index.js'
-import { agentRuns, episodes, generationTasks, scripts } from '../../database/index.js'
+import { agentRuns, episodePipelineStates, episodes, generationTasks, scripts } from '../../database/index.js'
 import type { StructuredTextProvider } from '../../providers/index.js'
 import { buildScriptAgentContext } from './context.js'
 import { buildScriptAgentSystemPrompt, buildScriptAgentUserPrompt } from './prompt.js'
@@ -150,6 +150,18 @@ export async function runScriptAgent(params: RunScriptAgentParams): Promise<Scri
           updatedAt: completedAt,
         })
         .where(eq(episodes.id, input.episodeId))
+
+      await tx.insert(episodePipelineStates).values({ episodeId: input.episodeId, updatedAt: completedAt }).onConflictDoNothing()
+      await tx
+        .update(episodePipelineStates)
+        .set({
+          scriptRevision: sql`${episodePipelineStates.scriptRevision} + 1`,
+          assetsStale: true,
+          storyboardsStale: true,
+          imagesStale: true,
+          updatedAt: completedAt,
+        })
+        .where(eq(episodePipelineStates.episodeId, input.episodeId))
 
       await tx
         .update(agentRuns)

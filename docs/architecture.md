@@ -135,7 +135,7 @@ Reconnection recovery uses a snapshot-on-connect model: on every (re)connect the
 
 ## Paused Scope: Later Phase 2
 
-Later Phase 2 is paused. Do not implement real image provider integration, video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2C.
+Later Phase 2 is paused. Do not implement video generation, TTS, subtitles, FFmpeg composition, final video export, or related media-generation routes/services unless the user explicitly requests expanding Phase 2 beyond Phase 2C. Real image-provider integration is already active in Phase 2A–2C.
 
 Paused/future media pipeline:
 
@@ -155,7 +155,13 @@ single-shot composition
 ↓
 episode merge / final video export
 
-Storyboard rows may already contain `image_prompt` and `video_prompt` planning fields, but these fields do not mean Phase 2 provider calls are active.
+Storyboard rows contain `image_prompt` and `video_prompt` planning fields. `image_prompt` is actively used by the Phase 2C first-frame image loop; `video_prompt` remains a planning field and must not trigger a video-provider call.
+
+## Next Architecture Baseline: Reliability and Version Governance
+
+`docs/backend-refactor-plan.md` is the approved target baseline for the next backend phase. It does not change the current single-instance deployment immediately. The implementation order is: SQLite stability and backup; task lease/timeout/retry/idempotency; revision and stale propagation; batch Job orchestration; then only where deployment needs justify it, PostgreSQL, cross-process queue/events, and object storage.
+
+The target task boundary remains `Route → Service → Scheduler → Worker/Handler → Provider → Database/Storage`. Task business writes and successful terminal status must become atomic; workers own leases, timeout recovery and retry policy. Pipeline stage display is derived from valid revisions and tasks rather than duplicated Episode state. Video/media capability remains a later, explicitly gated extension.
 
 ## Core Layers
 

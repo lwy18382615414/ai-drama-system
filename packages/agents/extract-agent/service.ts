@@ -1,11 +1,14 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { Character, DatabaseClient, Prop, Scene } from '../../database/index.js'
 import {
   agentRuns,
+  assets,
+  characterAppearanceVersions,
   characters,
   episodeCharacterLinks,
   episodePropLinks,
+  episodePipelineStates,
   episodeSceneLinks,
   episodes,
   generationTasks,
@@ -121,6 +124,11 @@ export async function runExtractAgent(params: RunExtractAgentParams): Promise<Ex
     const characterIds: string[] = []
     const sceneIds: string[] = []
     const propIds: string[] = []
+    const appearanceVersions: Array<{
+      versionId: string
+      characterId: string
+      action: 'created' | 'updated' | 'unchanged'
+    }> = []
 
     await params.db.transaction(async (tx) => {
       if (input.options?.force === true) {
@@ -144,6 +152,19 @@ export async function runExtractAgent(params: RunExtractAgentParams): Promise<Ex
 
           if (Object.keys(updates).length > 0) {
             await tx.update(characters).set(updates).where(eq(characters.id, existing.id))
+          }
+
+          // Appearance changes only apply to pre-existing characters; a new character's
+          // appearance field already is its base look.
+          const version = await upsertAppearanceVersion(
+            tx,
+            input.episodeId,
+            existing.id,
+            extracted.appearance_change,
+            completedAt,
+          )
+          if (version) {
+            appearanceVersions.push({ ...version, characterId: existing.id })
           }
         } else {
           await tx.insert(characters).values({
@@ -294,6 +315,20 @@ export async function runExtractAgent(params: RunExtractAgentParams): Promise<Ex
         })
       }
 
+      // Versions previously sourced from this episode whose character no longer appears
+      // in the latest extraction are stale — drop them (and retire their images).
+      const staleVersions = await tx
+        .select({ id: characterAppearanceVersions.id, characterId: characterAppearanceVersions.characterId })
+        .from(characterAppearanceVersions)
+        .where(eq(characterAppearanceVersions.sourceEpisodeId, input.episodeId))
+      const extractedCharacterIds = new Set(characterIds)
+      for (const stale of staleVersions) {
+        if (!extractedCharacterIds.has(stale.characterId)) {
+          await supersedeVersionAssets(tx, stale.id, completedAt)
+          await tx.delete(characterAppearanceVersions).where(eq(characterAppearanceVersions.id, stale.id))
+        }
+      }
+
       await tx
         .update(episodes)
         .set({
@@ -301,6 +336,18 @@ export async function runExtractAgent(params: RunExtractAgentParams): Promise<Ex
           updatedAt: completedAt,
         })
         .where(eq(episodes.id, input.episodeId))
+
+      await tx.insert(episodePipelineStates).values({ episodeId: input.episodeId, updatedAt: completedAt }).onConflictDoNothing()
+      await tx
+        .update(episodePipelineStates)
+        .set({
+          assetRevision: sql`${episodePipelineStates.assetRevision} + 1`,
+          assetsStale: false,
+          storyboardsStale: true,
+          imagesStale: true,
+          updatedAt: completedAt,
+        })
+        .where(eq(episodePipelineStates.episodeId, input.episodeId))
 
       await tx
         .update(agentRuns)
@@ -337,6 +384,7 @@ export async function runExtractAgent(params: RunExtractAgentParams): Promise<Ex
         sceneIds,
         propIds,
       },
+      appearanceVersions,
     }
   } catch (error) {
     const failedAt = new Date().toISOString()
@@ -365,6 +413,89 @@ export function normalizeDisplayName(name: string) {
 
 export function normalizeAssetKey(name: string) {
   return normalizeDisplayName(name).toLocaleLowerCase()
+}
+
+type Tx = Parameters<Parameters<DatabaseClient['transaction']>[0]>[0]
+
+/**
+ * Aligns the appearance version keyed by (character, source episode) with the latest
+ * extraction: create when a change appears, refresh when its text moved (retiring the now
+ * stale image), delete when a force re-extraction no longer reports a change.
+ */
+async function upsertAppearanceVersion(
+  tx: Tx,
+  episodeId: string,
+  characterId: string,
+  change: { new_appearance: string; reason?: string | null } | null | undefined,
+  now: string,
+): Promise<{ versionId: string; action: 'created' | 'updated' | 'unchanged' } | null> {
+  const [existingVersion] = await tx
+    .select()
+    .from(characterAppearanceVersions)
+    .where(
+      and(
+        eq(characterAppearanceVersions.characterId, characterId),
+        eq(characterAppearanceVersions.sourceEpisodeId, episodeId),
+      ),
+    )
+    .limit(1)
+
+  const newAppearance = cleanText(change?.new_appearance)
+
+  if (!newAppearance) {
+    if (existingVersion) {
+      await supersedeVersionAssets(tx, existingVersion.id, now)
+      await tx.delete(characterAppearanceVersions).where(eq(characterAppearanceVersions.id, existingVersion.id))
+    }
+    return null
+  }
+
+  const changeReason = cleanText(change?.reason)
+
+  if (!existingVersion) {
+    const versionId = nanoid()
+    await tx.insert(characterAppearanceVersions).values({
+      id: versionId,
+      characterId,
+      sourceEpisodeId: episodeId,
+      effectiveFromEpisodeNo: null,
+      appearance: newAppearance,
+      referenceImageUrl: null,
+      changeReason,
+      createdAt: now,
+      updatedAt: now,
+    })
+    return { versionId, action: 'created' }
+  }
+
+  if (existingVersion.appearance !== newAppearance) {
+    await supersedeVersionAssets(tx, existingVersion.id, now)
+    await tx
+      .update(characterAppearanceVersions)
+      .set({
+        appearance: newAppearance,
+        changeReason,
+        referenceImageUrl: null,
+        updatedAt: now,
+      })
+      .where(eq(characterAppearanceVersions.id, existingVersion.id))
+    return { versionId: existingVersion.id, action: 'updated' }
+  }
+
+  return { versionId: existingVersion.id, action: 'unchanged' }
+}
+
+async function supersedeVersionAssets(tx: Tx, versionId: string, now: string) {
+  await tx
+    .update(assets)
+    .set({ status: 'superseded', updatedAt: now })
+    .where(
+      and(
+        eq(assets.targetType, 'character_appearance_version'),
+        eq(assets.targetId, versionId),
+        eq(assets.status, 'active'),
+      ),
+    )
 }
 
 async function hasEpisodeAssetLinks(db: DatabaseClient, episodeId: string) {

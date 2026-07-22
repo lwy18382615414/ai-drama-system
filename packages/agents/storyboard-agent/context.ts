@@ -8,6 +8,7 @@ import {
   episodes,
   projects,
   props,
+  resolveCharacterAppearances,
   scenes,
   scripts,
   storyboards,
@@ -112,12 +113,21 @@ export async function buildStoryboardAgentContext(
     throw new Error(`Storyboard generation requires at least one linked scene: ${input.episodeId}`)
   }
 
+  // Appearance is episode-dependent: use the appearance version in effect for this
+  // episode (falling back to the character's base row) so shot prompts describe the
+  // right look after scars, haircuts, or time skips.
+  const resolvedAppearances = await resolveCharacterAppearances(
+    db,
+    characterRows.map(({ character }) => character.id),
+    episode.episodeNo,
+  )
+
   const normalizedCharacters = characterRows.map(({ character }) => ({
     id: character.id,
     projectId: character.projectId,
     name: character.name,
     role: character.role,
-    appearance: character.appearance,
+    appearance: resolvedAppearances.get(character.id)?.appearance ?? character.appearance,
     status: character.status,
   }))
 

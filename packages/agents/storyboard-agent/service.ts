@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import type { DatabaseClient } from '../../database/index.js'
-import { agentRuns, episodes, generationTasks, storyboards } from '../../database/index.js'
+import { agentRuns, episodePipelineStates, episodes, generationTasks, storyboards } from '../../database/index.js'
 import type { StructuredTextProvider } from '../../providers/index.js'
 import { buildStoryboardAgentContext, type StoryboardAgentContext } from './context.js'
 import { buildStoryboardAgentSystemPrompt, buildStoryboardAgentUserPrompt } from './prompt.js'
@@ -157,6 +157,17 @@ export async function runStoryboardAgent(params: RunStoryboardAgentParams): Prom
           updatedAt: completedAt,
         })
         .where(eq(episodes.id, input.episodeId))
+
+      await tx.insert(episodePipelineStates).values({ episodeId: input.episodeId, updatedAt: completedAt }).onConflictDoNothing()
+      await tx
+        .update(episodePipelineStates)
+        .set({
+          storyboardRevision: sql`${episodePipelineStates.storyboardRevision} + 1`,
+          storyboardsStale: false,
+          imagesStale: true,
+          updatedAt: completedAt,
+        })
+        .where(eq(episodePipelineStates.episodeId, input.episodeId))
 
       await tx
         .update(agentRuns)

@@ -309,7 +309,7 @@ Important constraint:
 
 Phase 2 note:
 
-- `visual_prompt` and `reference_image_url` are planning/reference fields; they should not trigger image-generation provider calls while Phase 2 is paused.
+- Props do not have an active image-generation loop in Phase 2A–2C. Their `visual_prompt` and `reference_image_url` remain planning/reference fields and must not trigger provider calls without an explicitly approved prop-image phase.
 
 ### episode_character_links
 
@@ -413,6 +413,8 @@ Phase 2 note:
 
 Long-running task records for Agent and future generation workflows.
 
+Current task fields describe the MVP implementation. The planned reliability schema is specified in `docs/backend-refactor-plan.md` and will add lease/heartbeat, retry scheduling, normalized error and upstream-revision fields. Those fields must be introduced by a migration together with a uniqueness constraint for the revision-aware idempotency key; they are not assumed to exist until that migration lands.
+
 Fields:
 
 - id
@@ -464,6 +466,19 @@ Phase 2A–2C supported `asset_type` / `target_type` values:
 ### agent_runs
 
 Audit log for Agent execution.
+
+## Planned Reliability and Version Extensions
+
+The next refactor introduces, incrementally rather than as a destructive rewrite:
+
+- revisions for planning, script, asset extraction, storyboard, and image generation;
+- downstream dependency revision fields plus persistent `stale` / `superseded` facts;
+- `generation_jobs` as a parent record for batch `generation_tasks`, with aggregate counts, progress, cancellation and estimated cost;
+- task lease fields (`locked_by`, `heartbeat_at`, `lease_expires_at`), `next_retry_at`, `timeout_seconds`, `error_code`, and redacted error detail;
+- reproducibility/cost fields: prompt/schema/agent versions, provider request ID, token/image usage, unit-price snapshot and estimated cost;
+- optional external blobs for oversized task inputs, outputs and raw provider responses.
+
+This is a target design only. Current migration/schema remains authoritative until each matching migration and service change is implemented. Old revisions are retained for comparison/rollback and marked stale or superseded before any retention cleanup.
 
 Fields:
 

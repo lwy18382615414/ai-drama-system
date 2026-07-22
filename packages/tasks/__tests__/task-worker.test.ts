@@ -4,6 +4,7 @@ import {
   closeDatabase,
   createDatabase,
   generationTasks,
+  generationJobs,
   initializeDatabase,
   projects,
   type DatabaseClient,
@@ -106,6 +107,91 @@ describe('TaskWorker', () => {
     worker.start()
 
     await waitFor(async () => (await getTask(db, id)).status === 'completed')
+  })
+
+  it('does not reclaim a running task with a valid lease', async () => {
+    const db = await setup()
+    const id = await insertTask(db, {
+      status: 'running',
+      lockedBy: 'another-worker',
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+    const worker = track(new TaskWorker(db, { pollIntervalMs: 3_600_000 }))
+    worker.register('unit_test', async () => {
+      throw new Error('leased task must not be replayed')
+    })
+
+    worker.start()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect((await getTask(db, id)).status).toBe('running')
+  })
+
+  it('cancels a claimed task before invoking its handler', async () => {
+    const db = await setup()
+    let ran = false
+    const worker = track(new TaskWorker(db, { pollIntervalMs: 3_600_000 }))
+    worker.register('unit_test', async () => {
+      ran = true
+    })
+    const id = await insertTask(db, { cancelRequestedAt: new Date().toISOString() })
+    worker.start()
+
+    await waitFor(async () => (await getTask(db, id)).status === 'cancelled')
+    expect(ran).toBe(false)
+  })
+
+  it('cancellation requested while a handler runs wins over its completed write', async () => {
+    const db = await setup()
+    let release!: () => void
+    const started = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let handlerStarted!: () => void
+    const handlerIsRunning = new Promise<void>((resolve) => {
+      handlerStarted = resolve
+    })
+    const worker = track(new TaskWorker(db, { pollIntervalMs: 3_600_000 }))
+    worker.register('unit_test', async (task) => {
+      handlerStarted()
+      await started
+      await db
+        .update(generationTasks)
+        .set({ status: 'completed', updatedAt: new Date().toISOString() })
+        .where(eq(generationTasks.id, task.id))
+    })
+    const id = await insertTask(db)
+    worker.start()
+    await handlerIsRunning
+
+    await db
+      .update(generationTasks)
+      .set({ cancelRequestedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+      .where(eq(generationTasks.id, id))
+    release()
+
+    await waitFor(async () => (await getTask(db, id)).status === 'cancelled')
+  })
+
+  it('updates parent job progress when a child task settles', async () => {
+    const db = await setup()
+    const now = new Date().toISOString()
+    await db.insert(generationJobs).values({
+      id: 'job-1', projectId: 'p1', jobType: 'unit_batch', totalCount: 1, pendingCount: 1, createdAt: now, updatedAt: now,
+    })
+    const worker = track(new TaskWorker(db, { pollIntervalMs: 3_600_000 }))
+    worker.register('unit_test', async (task) => {
+      await db.update(generationTasks).set({ status: 'completed', updatedAt: new Date().toISOString() }).where(eq(generationTasks.id, task.id))
+    })
+    const id = await insertTask(db, { jobId: 'job-1' })
+    worker.start()
+
+    await waitFor(async () => (await getTask(db, id)).status === 'completed')
+    await waitFor(async () => {
+      const [job] = await db.select().from(generationJobs).where(eq(generationJobs.id, 'job-1'))
+      return job?.status === 'completed'
+    })
+    const [job] = await db.select().from(generationJobs).where(eq(generationJobs.id, 'job-1'))
+    expect(job).toMatchObject({ succeededCount: 1, progressPercent: 100 })
   })
 
   it('retries a failing task up to maxRetries then leaves it failed', async () => {
