@@ -19,6 +19,7 @@ import {
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
 import { invalidateAfterScriptChange } from './episode-pipeline-service.js'
+import type { TaskOrchestration } from './task-orchestration.js'
 
 export const StartScriptGenerationRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -57,6 +58,7 @@ export async function startScriptGeneration(
   deps: ScriptServiceDeps,
   episodeId: string,
   request: StartScriptGenerationRequest,
+  orchestration?: TaskOrchestration,
 ) {
   const now = new Date().toISOString()
   const input = await buildScriptAgentInput(deps.db, episodeId, request)
@@ -74,6 +76,8 @@ export async function startScriptGeneration(
     outputJson: null,
     status: 'pending',
     retryCount: 0,
+    jobId: orchestration?.jobId ?? null,
+    idempotencyKey: orchestration?.idempotencyKey ?? null,
     errorMessage: null,
     startedAt: null,
     completedAt: null,

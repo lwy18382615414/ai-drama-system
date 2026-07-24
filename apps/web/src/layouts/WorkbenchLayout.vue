@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useProjectQuery } from '@/composables/useProjects'
 
 // 项目工作台外壳：208px 侧边栏 + 52px 顶栏，所有项目内页面共用。
 // frontend-design.md §4 / README §2。导航为真实 router-link，激活态高亮。
 const route = useRoute()
 const projectId = computed(() => String(route.params.projectId ?? ''))
+
+// 面包屑显示项目名称；加载中或缺失时回退到项目 ID。
+const { data: project } = useProjectQuery(projectId)
+const projectName = computed(() => project.value?.title || `项目 ${projectId.value}`)
 
 const navItems = [
   { name: 'chapters', label: '章节与事件' },
@@ -38,7 +43,7 @@ const navItems = [
 
     <div class="main">
       <header class="topbar">
-        <div class="breadcrumb">项目 {{ projectId }}</div>
+        <div class="breadcrumb">{{ projectName }}</div>
         <div class="topbar-right">
           <span class="sse-dot" title="实时连接" />
         </div>

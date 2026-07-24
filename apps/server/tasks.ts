@@ -13,6 +13,7 @@ import {
   ensureCharacterAppearanceVersionImages,
   executeImageGeneration,
 } from './services/image-generation-service.js'
+import { advancePipelineRun } from './services/pipeline-run-service.js'
 
 export interface TaskWorkerDeps {
   db: DatabaseClient
@@ -41,12 +42,15 @@ export function createTaskWorker(deps: TaskWorkerDeps, options?: TaskWorkerOptio
     await runScriptAgent({ db, provider, input: JSON.parse(task.inputJson) })
   })
   worker.register('asset_extraction', async (task) => {
-    const result = await runExtractAgent({ db, provider, input: JSON.parse(task.inputJson) })
+    const input = JSON.parse(task.inputJson)
+    const result = await runExtractAgent({ db, provider, input })
 
     // Eagerly back-fill reference images for appearance versions the extraction produced,
     // so the new look is visible in the assets pane right away. Best-effort: the lazy
     // path (ensureShotReferenceImages) regenerates anything missing before shot frames.
-    if (result.success) {
+    // The pipeline-run orchestrator sets `skipReferenceImages` to keep a "no images" run
+    // text-only; the images can be generated on demand later.
+    if (result.success && !input.skipReferenceImages) {
       const versionIds = result.appearanceVersions
         .filter((version) => version.action === 'created' || version.action === 'updated')
         .map((version) => version.versionId)
@@ -80,6 +84,14 @@ export function createTaskWorker(deps: TaskWorkerDeps, options?: TaskWorkerOptio
         referenceImages: input.referenceImages ?? [],
       },
     )
+  })
+
+  // Chain one-click pipeline runs: after any task belonging to a run settles, advance that run
+  // to enqueue the next unblocked step. `advancePipelineRun` no-ops for non-pipeline jobs.
+  worker.onSettled(async (task) => {
+    if (task.jobId) {
+      await advancePipelineRun({ db, provider, scheduler: worker }, task.jobId)
+    }
   })
 
   return worker

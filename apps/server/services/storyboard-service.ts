@@ -23,6 +23,7 @@ import {
 import { ScriptAgentOutputSchema } from '../../../packages/agents/script-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
+import type { TaskOrchestration } from './task-orchestration.js'
 
 export const StartStoryboardGenerationRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -77,6 +78,7 @@ export async function startStoryboardGeneration(
   deps: StoryboardServiceDeps,
   episodeId: string,
   request: StartStoryboardGenerationRequest,
+  orchestration?: TaskOrchestration,
 ) {
   const now = new Date().toISOString()
   const input = await buildStoryboardAgentInput(deps.db, episodeId, request)
@@ -94,6 +96,8 @@ export async function startStoryboardGeneration(
     outputJson: null,
     status: 'pending',
     retryCount: 0,
+    jobId: orchestration?.jobId ?? null,
+    idempotencyKey: orchestration?.idempotencyKey ?? null,
     errorMessage: null,
     startedAt: null,
     completedAt: null,

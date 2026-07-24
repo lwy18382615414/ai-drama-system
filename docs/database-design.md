@@ -415,6 +415,8 @@ Long-running task records for Agent and future generation workflows.
 
 Current task fields describe the MVP implementation. The planned reliability schema is specified in `docs/backend-refactor-plan.md` and will add lease/heartbeat, retry scheduling, normalized error and upstream-revision fields. Those fields must be introduced by a migration together with a uniqueness constraint for the revision-aware idempotency key; they are not assumed to exist until that migration lands.
 
+`idempotency_key` now has a **UNIQUE** index (migration `0006`). The one-click pipeline orchestrator uses it (`pipeline:{jobId}:{episodeId}:{taskType}`) as the durable guard against duplicate step enqueues; non-orchestration tasks leave it null (SQLite treats multiple NULLs as distinct). The parent `generation_jobs` row carries a `metadata_json` column that, for `job_type = 'pipeline_run'`, holds the run's scope and lifecycle phase. See `docs/phase-roadmap.md` "One-Click Pipeline Run".
+
 Fields:
 
 - id

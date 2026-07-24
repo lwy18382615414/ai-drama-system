@@ -371,7 +371,9 @@ export const generationTasks = sqliteTable('generation_tasks', {
 }, (table) => ({
   claimIdx: index('generation_tasks_claim_idx').on(table.status, table.nextRetryAt, table.createdAt),
   leaseIdx: index('generation_tasks_lease_idx').on(table.status, table.leaseExpiresAt),
-  idempotencyIdx: index('generation_tasks_idempotency_idx').on(table.idempotencyKey),
+  // Unique so concurrent advance passes cannot enqueue the same pipeline step twice.
+  // All non-orchestration tasks leave this null, and SQLite treats multiple NULLs as distinct.
+  idempotencyIdx: uniqueIndex('generation_tasks_idempotency_idx').on(table.idempotencyKey),
   jobIdx: index('generation_tasks_job_idx').on(table.jobId),
 }))
 
@@ -390,6 +392,9 @@ export const generationJobs = sqliteTable('generation_jobs', {
   skippedCount: integer('skipped_count').notNull().default(0),
   progressPercent: integer('progress_percent').notNull().default(0),
   estimatedCost: text('estimated_cost'),
+  /** Free-form job payload; for `pipeline_run` holds the orchestration scope/state
+   * `{ phase, chapterStartNo, chapterEndNo, batchId, terminalStage, generateImages }`. */
+  metadataJson: text('metadata_json').notNull().default('{}'),
   cancelRequestedAt: text('cancel_requested_at'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),

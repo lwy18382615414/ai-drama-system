@@ -25,6 +25,7 @@ import {
 } from "../../../packages/agents/episode-planner-agent/index.js";
 import type { StructuredTextProvider } from "../../../packages/providers/index.js";
 import type { TaskScheduler } from "../../../packages/tasks/index.js";
+import type { TaskOrchestration } from "./task-orchestration.js";
 
 export const CreateBatchRequestSchema = z
   .object({
@@ -63,6 +64,7 @@ export async function startBatchPlanning(
   deps: EpisodePlannerServiceDeps,
   projectId: string,
   request: CreateBatchRequest,
+  orchestration?: TaskOrchestration,
 ) {
   const [project] = await deps.db
     .select()
@@ -148,7 +150,7 @@ export async function startBatchPlanning(
     },
   );
 
-  return enqueuePlanningTask(deps, projectId, batchId, input);
+  return enqueuePlanningTask(deps, projectId, batchId, input, orchestration);
 }
 
 /**
@@ -365,6 +367,7 @@ async function enqueuePlanningTask(
   projectId: string,
   batchId: string,
   input: EpisodePlannerInput,
+  orchestration?: TaskOrchestration,
 ) {
   const taskId = nanoid();
   const now = new Date().toISOString();
@@ -381,6 +384,8 @@ async function enqueuePlanningTask(
     outputJson: null,
     status: "pending",
     retryCount: 0,
+    jobId: orchestration?.jobId ?? null,
+    idempotencyKey: orchestration?.idempotencyKey ?? null,
     errorMessage: null,
     startedAt: null,
     completedAt: null,

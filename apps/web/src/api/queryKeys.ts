@@ -28,6 +28,8 @@ export const queryKeys = {
   chapterEvents: (chapterId: string) => ['chapter-events', chapterId] as const,
   jobs: (projectId: string) => ['jobs', projectId] as const,
   job: (jobId: string) => ['job', jobId] as const,
+  /** Active one-click pipeline run for a project (GET projects/:id/pipeline-run). */
+  pipelineRun: (projectId: string) => ['pipeline-run', projectId] as const,
   generationTask: (taskId: string) => ['generation-task', taskId] as const,
   usage: (projectId: string) => ['usage', projectId] as const,
 } as const

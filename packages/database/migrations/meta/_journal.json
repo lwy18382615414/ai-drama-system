@@ -43,6 +43,13 @@
       "when": 1784693529236,
       "tag": "0005_foamy_puma",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784862487797,
+      "tag": "0006_keen_punisher",
+      "breakpoints": true
     }
   ]
 }

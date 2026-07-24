@@ -25,6 +25,8 @@ import { createImageGenerationRoutes } from './routes/image-generation.js'
 import { createAppearanceVersionRoutes } from './routes/appearance-versions.js'
 import { createTaskStreamRoutes } from './routes/task-stream.js'
 import { createEpisodePipelineRoutes } from './routes/episode-pipeline.js'
+import { createPipelineRunRoutes } from './routes/pipeline-run.js'
+import { sweepActivePipelineRuns } from './services/pipeline-run-service.js'
 
 export async function createApp() {
   const db = await createDatabase(process.env.DATABASE_URL ?? 'data/ai-drama.sqlite')
@@ -38,6 +40,10 @@ export async function createApp() {
   // recovers pending/interrupted tasks on startup.
   const worker = createTaskWorker({ db, provider, imageProvider }, resolveWorkerOptions())
   worker.start()
+
+  // Resume any pipeline runs left active by a previous process: the settle-hook only fires on
+  // live task completions, so a run interrupted mid-flight needs a one-shot sweep at startup.
+  void sweepActivePipelineRuns({ db, provider, scheduler: worker })
 
   const app = new Hono()
 
@@ -68,8 +74,9 @@ export async function createApp() {
   app.route('/', createAppearanceVersionRoutes({ db, imageProvider, scheduler: worker }))
   app.route('/', createTaskStreamRoutes({ db, bus: worker }))
   app.route('/', createEpisodePipelineRoutes({ db }))
+  app.route('/', createPipelineRunRoutes({ db, provider, scheduler: worker }))
 
-  return { app, db, worker }
+  return { app, db, worker, provider }
 }
 
 function createTextProvider(): StructuredTextProvider {

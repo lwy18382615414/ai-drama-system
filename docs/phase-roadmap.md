@@ -177,6 +177,47 @@ Boundary notes:
 
 - Phase 2C does not activate video, TTS, subtitle, FFmpeg, or final export workflows.
 
+## One-Click Pipeline Run (Orchestration)
+
+Status: complete (text-only terminal; image generation intentionally excluded).
+
+Scope:
+
+- Add a backend orchestration layer that runs the **next batch** end-to-end from a single request:
+  event extraction → episode planning → per-episode script → asset extraction → storyboards,
+  **stopping before any image generation**.
+- Reuse `generation_jobs` as the run container with `job_type = 'pipeline_run'`; the run's scope and
+  lifecycle live in `generation_jobs.metadata_json`
+  (`{ phase, chapterStartNo, chapterEndNo, batchId, terminalStage, generateImages }`). Every task the
+  run enqueues carries the run's `job_id`.
+- `advancePipelineRun` (`apps/server/services/pipeline-run-service.ts`) is a **declarative, idempotent**
+  advancer: it derives each episode's next step from persisted DB state rather than storing a "next
+  step" pointer. It is serialized per job by an in-process lock; a UNIQUE index on
+  `generation_tasks.idempotency_key` (`pipeline:{jobId}:{episodeId}:{taskType}`) is the durable backstop
+  against duplicate enqueues across restarts/processes.
+- Triggered by `TaskWorker.onSettled` (wired in `apps/server/tasks.ts`) for low latency, plus a startup
+  sweep (`app.ts`) and a periodic sweep (`index.ts`) so an interrupted run resumes.
+- The chain's only automatic image step — the eager character-appearance image back-fill in the
+  `asset_extraction` handler — is suppressed via a `skipReferenceImages` payload flag. Scene, prop, and
+  first-frame images are only ever produced by explicit `image_generation` tasks, which the advancer
+  never enqueues.
+- Failure policy: a permanent extraction/planning failure fails the whole run (planning is a hard gate);
+  per-episode production failures are isolated — the failed episode's downstream stops, siblings proceed,
+  and the run settles as `failed` once nothing can advance.
+- Routes: `POST /api/projects/:projectId/pipeline-run` (start; returns the existing run if one is active),
+  `GET /api/projects/:projectId/pipeline-run` (active run). Progress is read via the existing
+  `GET /api/generation-jobs/:jobId` and the project task SSE stream.
+- Frontend entry: a dedicated "one-click to storyboards" control in `ChaptersView`. The run targets the
+  next contiguous batch (`chapterStartNo = plannedChapterEndNo + 1`); the user only picks `chapterEndNo`.
+
+Boundary notes:
+
+- The run lifecycle is authoritative in `metadata.phase`, **not** the task-count-derived `job.status`
+  (which can transiently read `completed` between phases).
+- `generateImages` is a reserved request flag (default `false`). When `true` it only un-suppresses the
+  character image back-fill; the advancer still stops at storyboards. "One-click all the way to images"
+  is an unimplemented extension point.
+
 ## Later Phase 2: Paused Media Generation Pipeline
 
 Status: paused.

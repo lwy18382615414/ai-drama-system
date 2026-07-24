@@ -21,6 +21,7 @@ import {
 import { ScriptAgentOutputSchema } from '../../../packages/agents/script-agent/index.js'
 import type { StructuredTextProvider } from '../../../packages/providers/index.js'
 import type { TaskScheduler } from '../../../packages/tasks/index.js'
+import type { TaskOrchestration } from './task-orchestration.js'
 
 export const StartAssetExtractionRequestSchema = z.object({
   force: z.boolean().optional(),
@@ -48,6 +49,7 @@ export async function startAssetExtraction(
   deps: AssetExtractionServiceDeps,
   episodeId: string,
   request: StartAssetExtractionRequest,
+  orchestration?: TaskOrchestration & { skipReferenceImages?: boolean },
 ) {
   const now = new Date().toISOString()
   const input = await buildExtractAgentInput(deps.db, episodeId, request)
@@ -61,10 +63,14 @@ export async function startAssetExtraction(
     taskType: 'asset_extraction',
     provider: deps.provider.name,
     model: input.options?.model ?? deps.provider.model,
-    inputJson: JSON.stringify({ ...input, taskId }),
+    // `skipReferenceImages` is an orchestration payload flag (not a task column) read by the
+    // asset_extraction worker handler to suppress the eager character-image backfill.
+    inputJson: JSON.stringify({ ...input, taskId, skipReferenceImages: orchestration?.skipReferenceImages ?? false }),
     outputJson: null,
     status: 'pending',
     retryCount: 0,
+    jobId: orchestration?.jobId ?? null,
+    idempotencyKey: orchestration?.idempotencyKey ?? null,
     errorMessage: null,
     startedAt: null,
     completedAt: null,

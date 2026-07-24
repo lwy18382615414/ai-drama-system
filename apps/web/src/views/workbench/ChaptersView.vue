@@ -20,6 +20,41 @@
       </div>
     </header>
 
+    <!-- One-click: run the next batch through to storyboards (no images) -->
+    <div v-if="chapters && chapters.length > 0" class="oneclick-bar">
+      <template v-if="activeRun">
+        <span class="oc-status">
+          <span class="pulse-dot" />
+          一键生成进行中 · {{ phaseLabel(activeRun.metadata.phase) }}
+          <span class="oc-range">第 {{ activeRun.metadata.chapterStartNo }}–{{ activeRun.metadata.chapterEndNo }} 章</span>
+        </span> 
+      </template>
+      <template v-else-if="hasUnplanned">
+        <span class="oc-label">一键生成到分镜</span>
+        <span class="oc-range">第 {{ nextStartNo }} 章起 →</span>
+        <NSelect
+          class="oc-select"
+          size="small"
+          :value="pipelineEndNo"
+          :options="endOptions"
+          @update:value="(v: number) => (pipelineEndNo = v)"
+        />
+        <NButton
+          size="small"
+          type="primary"
+          :loading="startPipeline.isPending.value"
+          :disabled="pipelineEndNo === null"
+          @click="runOneClick"
+        >
+          生成（第 {{ nextStartNo }}–{{ pipelineEndNo }} 章）
+        </NButton>
+        <span class="oc-hint">事件提取 → 分集 → 剧本 / 人物场景道具 / 分镜，不生成图片</span>
+      </template>
+      <template v-else>
+        <span class="oc-muted">全部章节已规划入批次</span>
+      </template>
+    </div>
+
     <!-- Loading -->
     <div v-if="isPending" class="state-box"><NSpin size="large" /></div>
 
@@ -47,7 +82,13 @@
       <div class="chapters-panel">
         <div class="table-card">
           <div class="row row--head">
-            <div class="col-check" />
+            <div class="col-check" @click.stop>
+              <NCheckbox
+                :checked="allSelected"
+                :indeterminate="someSelected"
+                @update:checked="toggleSelectAll"
+              />
+            </div>
             <div class="col-no">章节</div>
             <div class="col-title">标题</div>
             <div class="col-words">字数</div>
@@ -179,9 +220,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { NSpin, NResult, NButton, NEmpty, NCheckbox, useMessage, useDialog } from 'naive-ui'
+import { NSpin, NResult, NButton, NEmpty, NCheckbox, NSelect, useMessage, useDialog } from 'naive-ui'
 import { useChaptersQuery, useDeleteChaptersMutation } from '@/composables/useChapters'
 import { useStartEventExtractionMutation, useStartBatchEventExtractionMutation } from '@/composables/useEvents'
+import { useStartPipelineRunMutation, useActivePipelineRunQuery } from '@/composables/usePipelineRun'
+import type { PipelineRunPhase } from '@/api/pipelineRun'
 import { useProjectQuery } from '@/composables/useProjects'
 import { useProjectTaskStream } from '@/composables/useProjectTaskStream'
 import ChapterEventsPanel from '@/components/ChapterEventsPanel.vue'
@@ -223,6 +266,57 @@ const extractedCount = computed(
   () => chapters.value?.filter((c) => c.status === 'event_extracted').length ?? 0,
 )
 
+// ── One-click pipeline run (next batch → storyboards, no images) ───────────────
+const startPipeline = useStartPipelineRunMutation()
+const { data: activeRun } = useActivePipelineRunQuery(projectId)
+
+// The next batch always starts right after the last planned chapter; the user only
+// picks how far it extends. Arbitrary mid-novel selection isn't supported by the planner.
+const maxChapterNo = computed(() => (chapters.value?.length ? chapters.value[chapters.value.length - 1].chapterNo : 0))
+const nextStartNo = computed(() => plannedEndNo.value + 1)
+const hasUnplanned = computed(() => maxChapterNo.value >= nextStartNo.value)
+const endOptions = computed(() =>
+  (chapters.value ?? [])
+    .filter((c) => c.chapterNo >= nextStartNo.value)
+    .map((c) => ({ label: `第 ${c.chapterNo} 章`, value: c.chapterNo })),
+)
+const pipelineEndNo = ref<number | null>(null)
+// Keep the picked end within the current unplanned range; default to "all remaining".
+watch(
+  [nextStartNo, maxChapterNo],
+  () => {
+    if (pipelineEndNo.value === null || pipelineEndNo.value < nextStartNo.value || pipelineEndNo.value > maxChapterNo.value) {
+      pipelineEndNo.value = maxChapterNo.value || null
+    }
+  },
+  { immediate: true },
+)
+
+const phaseLabel = (phase: PipelineRunPhase): string =>
+  ({
+    extracting: '事件提取中',
+    planning: '规划分集中',
+    producing: '生成剧本/资产/分镜中',
+    done: '已完成',
+    failed: '部分失败',
+  })[phase]
+
+async function runOneClick() {
+  if (!hasUnplanned.value || pipelineEndNo.value === null) return
+  try {
+    const res = await startPipeline.mutateAsync({
+      projectId: projectId.value,
+      chapterEndNo: pipelineEndNo.value,
+      generateImages: false,
+    })
+    message.success(
+      res.reused ? '已有一键生成任务在进行中' : `已提交一键生成（第 ${nextStartNo.value}–${pipelineEndNo.value} 章 → 分镜）`,
+    )
+  } catch (err) {
+    message.error((err as Error)?.message || '一键生成提交失败')
+  }
+}
+
 // ── Selection ────────────────────────────────────────────────────────────────
 const selected = ref<Set<string>>(new Set())
 const isSelected = (id: string) => selected.value.has(id)
@@ -233,6 +327,13 @@ function toggleSelect(id: string, value: boolean) {
 }
 function clearSelection() {
   selected.value = new Set()
+}
+const allSelected = computed(
+  () => !!chapters.value && chapters.value.length > 0 && selected.value.size === chapters.value.length,
+)
+const someSelected = computed(() => selected.value.size > 0 && !allSelected.value)
+function toggleSelectAll(value: boolean) {
+  selected.value = value ? new Set((chapters.value ?? []).map((c) => c.id)) : new Set()
 }
 const selectedChapters = computed(() => (chapters.value ?? []).filter((c) => selected.value.has(c.id)))
 const selectedExtractable = computed(() => selectedChapters.value.filter(canExtract))
@@ -340,6 +441,7 @@ function deleteSelected() {
 
 <style scoped>
 .chapters-view {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -404,6 +506,46 @@ function deleteSelected() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.oneclick-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: #f6f9fe;
+  border: 1px solid #dbe8fb;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.oc-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2225;
+}
+.oc-range {
+  font-size: 12px;
+  color: #5b6169;
+}
+.oc-select {
+  width: 120px;
+}
+.oc-hint {
+  font-size: 12px;
+  color: #8a9099;
+}
+.oc-muted {
+  font-size: 13px;
+  color: #8a9099;
+}
+.oc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2080f0;
 }
 .sse-state {
   width: 8px;
@@ -530,6 +672,9 @@ function deleteSelected() {
   align-items: center;
   padding: 10px 14px;
   border-bottom: 1px solid #f2f4f6;
+  /* Transparent left border on every row so .row--active's colored border
+     does not shift content sideways and break column alignment. */
+  border-left: 3px solid transparent;
   font-size: 13px;
   color: #2b2f33;
   cursor: pointer;
@@ -555,6 +700,11 @@ function deleteSelected() {
 .row--active {
   background: #f0f7ff !important;
   border-left: 3px solid #2080f0;
+}
+.col-check {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 .col-no {
   color: #5b6169;
@@ -640,17 +790,21 @@ function deleteSelected() {
   text-decoration: none;
 }
 .action-bar {
-  position: sticky;
-  bottom: 16px;
-  margin: 16px auto 0;
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
   max-width: 560px;
+  z-index: 20;
   background: #1f2225;
   color: #fff;
   border-radius: 12px;
   padding: 10px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 20px;
   box-shadow: 0 10px 30px rgba(31, 34, 37, 0.28);
 }
 .ab-count {
@@ -659,6 +813,14 @@ function deleteSelected() {
 .ab-actions {
   display: flex;
   gap: 8px;
+}
+/* Quaternary "取消" button sits on the dark bar — force a readable light color. */
+.action-bar :deep(.n-button.n-button--quaternary-type) {
+  color: rgba(255, 255, 255, 0.7);
+}
+.action-bar :deep(.n-button.n-button--quaternary-type:hover) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 .fade-up-enter-active,
 .fade-up-leave-active {

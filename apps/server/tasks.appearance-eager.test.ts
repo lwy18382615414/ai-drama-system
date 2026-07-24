@@ -184,4 +184,69 @@ describe('asset_extraction eager appearance version images', () => {
     const [extractTask] = await db.select().from(generationTasks).where(eq(generationTasks.id, taskId))
     expect(extractTask.status).toBe('completed')
   })
+
+  it('skips the eager version image when skipReferenceImages is set', async () => {
+    const db = await createTestDb()
+    await seed(db)
+
+    const provider = new MockStructuredTextProvider(() => ({
+      characters: [
+        {
+          name: '林晚',
+          usage_type: 'protagonist',
+          appearance_change: {
+            new_appearance: '黑色礼服，左脸有一道疤痕。',
+            reason: '打斗中被划伤',
+          },
+        },
+      ],
+      scenes: [],
+      props: [],
+    }))
+    let imageCalls = 0
+    const imageProvider = new MockImageProvider(() => {
+      imageCalls += 1
+      return '/static/should-not-happen.png'
+    })
+    const worker = startTestWorker(db, { provider, imageProvider })
+
+    const taskId = 'task-extract-skip'
+    await db.insert(generationTasks).values({
+      id: taskId,
+      projectId: 'project-1',
+      episodeId: 'episode-2',
+      taskType: 'asset_extraction',
+      // The orchestration flag lives alongside the ExtractAgentInput on the task payload.
+      inputJson: JSON.stringify({ ...extractInput(taskId), skipReferenceImages: true }),
+      status: 'pending',
+      retryCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    void worker.announce(taskId)
+    worker.notify()
+
+    // Wait for the extraction task to settle, then give the (suppressed) backfill a margin.
+    let extractTask: typeof generationTasks.$inferSelect | undefined
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      ;[extractTask] = await db.select().from(generationTasks).where(eq(generationTasks.id, taskId))
+      if (extractTask?.status === 'completed') break
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(extractTask?.status).toBe('completed')
+
+    // Extraction still ran (the version row exists) but no image was generated for it.
+    const [version] = await db.select().from(characterAppearanceVersions)
+    expect(version?.appearance).toBe('黑色礼服，左脸有一道疤痕。')
+    expect(version?.referenceImageUrl).toBeNull()
+    expect(imageCalls).toBe(0)
+
+    const assetRows = await db
+      .select()
+      .from(assets)
+      .where(eq(assets.targetType, 'character_appearance_version'))
+    expect(assetRows).toHaveLength(0)
+  })
 })

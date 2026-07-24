@@ -54,6 +54,8 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
   private started = false
   private draining = false
   private pollTimer: ReturnType<typeof setInterval> | undefined
+  /** Optional post-settle hook, used by the pipeline orchestrator to advance a run's next step. */
+  private settledHook: ((task: GenerationTask) => void | Promise<void>) | undefined
 
   constructor(
     private readonly db: DatabaseClient,
@@ -69,6 +71,15 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
 
   register(taskType: string, handler: TaskHandler): void {
     this.handlers.set(taskType, handler)
+  }
+
+  /**
+   * Registers a hook invoked after every task settles (completed/failed/cancelled/requeued),
+   * once its job aggregate has been refreshed. Used to chain multi-step orchestrated runs.
+   * Hook failures are isolated and never affect task execution.
+   */
+  onSettled(hook: (task: GenerationTask) => void | Promise<void>): void {
+    this.settledHook = hook
   }
 
   /** Begins recovery + polling and claims any already-pending work. Idempotent. */
@@ -292,6 +303,14 @@ export class TaskWorker implements TaskScheduler, TaskEventBus {
       await this.refreshJob(task.jobId)
       // Emit the settled state (completed / failed / requeued-to-pending) to any subscribers.
       await this.emitCurrent(task.id)
+      // Notify the orchestrator last, after counts are refreshed, so it observes settled state.
+      if (this.settledHook) {
+        try {
+          await this.settledHook(task)
+        } catch {
+          // Orchestration hook failures must never wedge the worker loop.
+        }
+      }
     }
   }
 

@@ -367,6 +367,35 @@ Purpose:
 
 - supports editable storyboard workflow after generation
 
+## One-Click Pipeline Run Routes
+
+Implemented by `apps/server/routes/pipeline-run.ts` and `apps/server/services/pipeline-run-service.ts`.
+Orchestrates the **next batch** end-to-end (event extraction → planning → per-episode
+script → asset extraction → storyboards), **stopping before any image generation**. See
+`docs/phase-roadmap.md` "One-Click Pipeline Run" for the design and invariants.
+
+### `POST /api/projects/:projectId/pipeline-run`
+
+Starts a one-click run over the next batch. Body: `{ chapterEndNo?, generateImages? }` —
+the chapter start is locked to `plannedChapterEndNo + 1`; the body picks `chapterEndNo`
+(defaults to the last chapter). `generateImages` defaults to `false` (reserved; the run
+still terminates at storyboards). Idempotent per project: if a run is already active it is
+returned rather than starting a second one. Returns `202 Accepted` with `{ jobId, reused }`.
+
+Rejections mirror planning: `422` if the range is out of bounds / already planned / not
+contiguous, `404` if the project is missing, `400` if the project has no chapters.
+
+The run enqueues each step as a normal `generation_tasks` row tagged with this `jobId` and a
+deterministic `idempotency_key`; progress is observed via `GET /api/generation-jobs/:jobId`
+and the project task SSE stream. Un-extracted chapters in range are extracted first
+(already-extracted chapters are skipped).
+
+### `GET /api/projects/:projectId/pipeline-run`
+
+Returns the project's currently-active run as `{ run: { jobId, metadata } | null }`, where
+`metadata.phase ∈ extracting | planning | producing`. A run whose phase reached `done` or
+`failed` is no longer "active" and returns `null`.
+
 ## Phase 2A–2C Image Generation Routes
 
 Implemented by `apps/server/routes/image-generation.ts` and `apps/server/services/image-generation-service.ts`.
